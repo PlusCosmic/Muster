@@ -25,7 +25,7 @@
     sort: 'M7 4.5v15m0 0-3-3m3 3 3-3M17 19.5v-15m0 0-3 3m3-3 3 3',
     undo: 'M4.5 9.5h10a5 5 0 0 1 0 10h-3.5M4.5 9.5l4-4M4.5 9.5l4 4',
     moveAll: 'M4 12h10m0 0-3.5-3.5M14 12l-3.5 3.5M19 5v14',
-    dot: 'M12 12h.01',
+    kebab: 'M12 5.5h.01M12 12h.01M12 18.5h.01',
     spinner: 'M12 3a9 9 0 0 1 9 9'
   } as const;
 
@@ -44,7 +44,7 @@
   let { name, size = 16, strokeWidth = 1.8, class: klass = '' }: Props = $props();
 
   const filled = $derived(name === 'play');
-  const dotty = $derived(name === 'grip' || name === 'dot');
+  const dotty = $derived(name === 'grip' || name === 'kebab');
 </script>
 
 <svg
