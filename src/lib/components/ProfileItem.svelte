@@ -105,7 +105,7 @@
         <Icon name="play" size={13} />
       </button>
       <button class="act" title="More actions" onclick={openMenuFromButton}>
-        <Icon name="dot" size={14} strokeWidth={3} />
+        <Icon name="kebab" size={14} />
       </button>
     </span>
   </div>
