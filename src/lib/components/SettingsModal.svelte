@@ -1,5 +1,6 @@
 <script lang="ts">
   import { app } from '$lib/stores/app.svelte';
+  import { theme, THEMES } from '$lib/stores/theme.svelte';
   import { absoluteTime, relativeTime } from '$lib/format';
   import { MOCK_ENABLED } from '$lib/backend';
   import type { Settings } from '$lib/types';
@@ -76,6 +77,26 @@
 </script>
 
 <Modal title="Settings" subtitle="Path overrides and mod-sorting data" width={620} {onclose}>
+  <section class="group">
+    <h3>Appearance</h3>
+    <div class="field theme-row">
+      <div>
+        <label class="label" for="rf-theme">Theme</label>
+        <p class="hint">{THEMES.find((t) => t.id === theme.current)?.description}</p>
+      </div>
+      <select
+        id="rf-theme"
+        class="input select"
+        value={theme.current}
+        onchange={(e) => theme.set(e.currentTarget.value)}
+      >
+        {#each THEMES as t (t.id)}
+          <option value={t.id}>{t.name}</option>
+        {/each}
+      </select>
+    </div>
+  </section>
+
   <section class="group">
     <h3>Paths</h3>
     <p class="group-note">
@@ -206,6 +227,31 @@
 
   .field {
     margin-top: 14px;
+  }
+
+  .theme-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin-top: 10px;
+  }
+  .theme-row .hint {
+    margin-top: 2px;
+  }
+  .select {
+    width: 180px;
+    flex: none;
+    cursor: pointer;
+    /* native select needs an explicit bg/appearance to match .input */
+    -webkit-appearance: none;
+    appearance: none;
+    padding-right: 28px;
+    background-image: linear-gradient(45deg, transparent 50%, var(--text-muted) 50%),
+      linear-gradient(135deg, var(--text-muted) 50%, transparent 50%);
+    background-position: calc(100% - 16px) 55%, calc(100% - 11px) 55%;
+    background-size: 5px 5px;
+    background-repeat: no-repeat;
   }
 
   .input-row {
