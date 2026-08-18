@@ -1,6 +1,8 @@
 <script lang="ts">
   import { launchProfileFlow, reloadCurrentFlow, renameProfileFlow } from '$lib/actions';
+  import { revealPath } from '$lib/api';
   import { app } from '$lib/stores/app.svelte';
+  import { toastError } from '$lib/stores/toasts.svelte';
   import { absoluteTime, relativeTime } from '$lib/format';
   import Icon from './Icon.svelte';
   import ModListEditor from './ModListEditor.svelte';
@@ -30,7 +32,13 @@
         </div>
         <div class="path-row">
           <Icon name="folder" size={12} />
-          <span class="path mono truncate" data-selectable title={profile.path}>{profile.path}</span>
+          <button
+            class="path mono truncate"
+            title="Open {profile.path} in file manager"
+            onclick={() => revealPath(profile.path).catch((e) => toastError('Open folder', e))}
+          >
+            {profile.path}
+          </button>
           <span class="dot-sep">·</span>
           <span class="played" title={absoluteTime(profile.lastPlayedAtMs)}>
             {relativeTime(profile.lastPlayedAtMs)}
@@ -143,6 +151,17 @@
   }
   .path {
     min-width: 0;
+    background: none;
+    border: none;
+    padding: 0;
+    font-size: inherit;
+    color: inherit;
+    cursor: pointer;
+    text-align: left;
+  }
+  .path:hover {
+    color: var(--text);
+    text-decoration: underline;
   }
   .dot-sep {
     opacity: 0.5;
