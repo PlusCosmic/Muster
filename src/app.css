@@ -28,6 +28,11 @@
   --accent-soft: rgba(211, 112, 58, 0.16);
   --accent-line: rgba(211, 112, 58, 0.42);
 
+  /* Brand mark (the ingot icon) — tile gradient + ingot fill */
+  --mark-grad-1: #e8834a;
+  --mark-grad-2: #a34d1f;
+  --mark-fg: #f9efe4;
+
   /* Semantic */
   --danger: #e0524f;
   --danger-soft: rgba(224, 82, 79, 0.15);
@@ -101,6 +106,9 @@
   --info-soft: rgba(98, 179, 196, 0.15);
   --src-workshop: #8f9fdd;
   --scrollbar-hover: #4d576a;
+  --mark-grad-1: #6fade5;
+  --mark-grad-2: #40679a;
+  --mark-fg: #eff5fb;
 }
 
 :root[data-theme='moss'] {
@@ -126,6 +134,9 @@
   --ok: #6fc287;
   --src-local: #62c4a8;
   --scrollbar-hover: #4f5c49;
+  --mark-grad-1: #9bbd5c;
+  --mark-grad-2: #5f7a31;
+  --mark-fg: #f2f6ea;
 }
 
 :root[data-theme='parchment'] {
@@ -162,6 +173,9 @@
   --shadow-md: 0 6px 20px rgba(88, 68, 40, 0.22);
   --shadow-lg: 0 18px 50px rgba(88, 68, 40, 0.3);
   --scrollbar-hover: #ab9877;
+  --mark-grad-1: #ab5c2c;
+  --mark-grad-2: #7a3c17;
+  --mark-fg: #fdf6ea;
 
   color-scheme: light;
 }
