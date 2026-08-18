@@ -36,6 +36,12 @@
 
   const mismatchCount = $derived(app.activeMods.filter((m) => app.isVersionMismatch(m)).length);
 
+  // Core is always first and can't be moved or removed, so its row is just
+  // noise — hide it, but keep each row's real load-order index for drag/drop.
+  const visibleActive = $derived(
+    app.activeMods.map((mod, idx) => ({ mod, idx })).filter(({ mod }) => mod.packageId !== CORE_ID)
+  );
+
   const SOURCES: Array<{ value: 'all' | ModSource; label: string }> = [
     { value: 'all', label: 'All' },
     { value: 'official', label: 'DLC' },
@@ -231,7 +237,7 @@
     >
       <header>
         <h3>Active</h3>
-        <span class="count">{app.activeIds.length}</span>
+        <span class="count">{visibleActive.length}</span>
         {#if mismatchCount > 0}
           <span class="warn-pill" title="Active mods that don’t list the installed game version">
             <Icon name="alert" size={11} />
@@ -258,32 +264,34 @@
         </button>
       </header>
 
-      <p class="order-hint">Load order runs top to bottom. Drag rows to reorder.</p>
+      <p class="order-hint">
+        Load order runs top to bottom. Drag rows to reorder. Core always loads first and is
+        managed for you.
+      </p>
 
       <ul class="list" role="listbox" aria-label="Active mods">
         {#if app.loadingActive}
           <li class="placeholder">Reading ModsConfig.xml…</li>
-        {:else if app.activeMods.length === 0}
+        {:else if visibleActive.length === 0}
           <li class="placeholder">No active mods. Add some from the left.</li>
         {:else}
-          {#each app.activeMods as mod, i (mod.packageId)}
+          {#each visibleActive as { mod, idx }, vi (mod.packageId)}
             <ModRow
               {mod}
               column="active"
-              position={i + 1}
-              locked={mod.packageId === CORE_ID}
+              position={vi + 1}
               missing={!app.modsById.has(mod.packageId)}
               warned={warnedIds.has(mod.packageId)}
               mismatch={app.isVersionMismatch(mod)}
               gameVersion={app.gameMajorMinor}
               dragging={drag?.packageId === mod.packageId}
-              dropEdge={dropEdgeFor('active', i)}
+              dropEdge={dropEdgeFor('active', idx)}
               onmove={() => app.deactivate(mod.packageId)}
               onmoveup={() => app.moveBy(mod.packageId, -1)}
               onmovedown={() => app.moveBy(mod.packageId, 1)}
-              ondragstart={(e) => onRowDragStart(e, mod, 'active', i)}
-              ondragover={(e) => onRowDragOver(e, 'active', i)}
-              ondrop={(e) => onRowDrop(e, 'active', i)}
+              ondragstart={(e) => onRowDragStart(e, mod, 'active', idx)}
+              ondragover={(e) => onRowDragOver(e, 'active', idx)}
+              ondrop={(e) => onRowDrop(e, 'active', idx)}
               ondragend={resetDrag}
             />
           {/each}

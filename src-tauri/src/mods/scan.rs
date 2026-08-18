@@ -23,6 +23,20 @@ pub fn is_official_expansion(package_id: &str) -> bool {
     OFFICIAL_EXPANSIONS.contains(&package_id)
 }
 
+/// Official content ships About.xml with no `<name>` — the game hardcodes the
+/// display names, so we do too instead of falling back to the packageId.
+pub fn official_display_name(package_id: &str) -> Option<&'static str> {
+    match package_id {
+        CORE_PACKAGE_ID => Some("RimWorld"),
+        "ludeon.rimworld.royalty" => Some("Royalty"),
+        "ludeon.rimworld.ideology" => Some("Ideology"),
+        "ludeon.rimworld.biotech" => Some("Biotech"),
+        "ludeon.rimworld.anomaly" => Some("Anomaly"),
+        "ludeon.rimworld.odyssey" => Some("Odyssey"),
+        _ => None,
+    }
+}
+
 /// Release-order rank of an official expansion, if it is one.
 pub fn expansion_rank(package_id: &str) -> Option<usize> {
     OFFICIAL_EXPANSIONS.iter().position(|e| *e == package_id)
@@ -55,9 +69,18 @@ fn to_mod_info(
     source: ModSource,
     steam_workshop_id: Option<String>,
 ) -> ModInfo {
+    // parse_about falls back to name = packageId when <name> is absent, which
+    // is how all official content ships.
+    let name = if about.name == about.package_id {
+        official_display_name(&about.package_id)
+            .map(str::to_string)
+            .unwrap_or(about.name)
+    } else {
+        about.name
+    };
     ModInfo {
         package_id: about.package_id,
-        name: about.name,
+        name,
         authors: about.authors,
         path: dir.to_string_lossy().to_string(),
         source,
@@ -200,6 +223,25 @@ mod tests {
         .unwrap();
         let info = read_mod_dir(&dir, ModSource::Local).unwrap().unwrap();
         assert_eq!(info.package_id, "rince.gaulishgojuice");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn official_content_without_name_gets_display_name() {
+        // Real Data/*/About.xml files ship no <name> element at all.
+        let root = temp_root("names");
+        let dir = write_mod(
+            &root,
+            "Royalty",
+            "<ModMetaData><packageId>Ludeon.RimWorld.Royalty</packageId></ModMetaData>",
+        );
+        let info = read_mod_dir(&dir, ModSource::Official).unwrap().unwrap();
+        assert_eq!(info.name, "Royalty");
+
+        // Unofficial mods without a <name> still fall back to the packageId.
+        let dir = write_mod(&root, "NoName", "<ModMetaData><packageId>A.B</packageId></ModMetaData>");
+        let info = read_mod_dir(&dir, ModSource::Local).unwrap().unwrap();
+        assert_eq!(info.name, "a.b");
         let _ = std::fs::remove_dir_all(&root);
     }
 

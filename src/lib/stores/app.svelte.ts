@@ -15,11 +15,21 @@ import { toastError, toastSuccess } from './toasts.svelte';
 
 export const CORE_ID = 'ludeon.rimworld';
 
+/** Official content ships no <name> in About.xml; the game hardcodes these. */
+const OFFICIAL_NAMES: Record<string, string> = {
+  [CORE_ID]: 'RimWorld',
+  'ludeon.rimworld.royalty': 'Royalty',
+  'ludeon.rimworld.ideology': 'Ideology',
+  'ludeon.rimworld.biotech': 'Biotech',
+  'ludeon.rimworld.anomaly': 'Anomaly',
+  'ludeon.rimworld.odyssey': 'Odyssey'
+};
+
 /** Placeholder for an active id with no matching installed mod. */
 export function ghostMod(packageId: string): ModInfo {
   return {
     packageId,
-    name: packageId,
+    name: OFFICIAL_NAMES[packageId] ?? packageId,
     authors: '',
     path: '',
     source: 'local',
