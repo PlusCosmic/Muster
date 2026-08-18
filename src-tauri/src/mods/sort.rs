@@ -12,6 +12,9 @@ use crate::mods::scan;
 const TIER_CORE: usize = 0;
 /// Tier base for official expansions (offset by release order).
 const TIER_EXPANSION_BASE: usize = 1;
+/// Tier for mods with a community `loadTop` rule (framework mods that want to
+/// sit directly behind the official content).
+const TIER_TOP: usize = 100;
 /// Tier for ordinary mods.
 const TIER_NORMAL: usize = 1_000;
 /// Tier for mods with a community `loadBottom` rule.
@@ -144,8 +147,14 @@ pub fn sort_with(
         if let Some(rank) = scan::expansion_rank(id) {
             return TIER_EXPANSION_BASE + rank;
         }
-        if rule_of(id).map(|r| r.load_bottom).unwrap_or(false) {
-            return TIER_BOTTOM;
+        if let Some(rule) = rule_of(id) {
+            // loadBottom wins if a mod somehow carries both.
+            if rule.load_bottom {
+                return TIER_BOTTOM;
+            }
+            if rule.load_top {
+                return TIER_TOP;
+            }
         }
         TIER_NORMAL
     };
@@ -377,18 +386,29 @@ mod tests {
         let mut prepatcher = m("zetrith.prepatcher", "Prepatcher");
         prepatcher.load_before = ids(&["ludeon.rimworld"]);
 
+        // Gets a community loadTop rule. Its display name sorts last, so any
+        // correct placement near the front must come from the tier, not the name.
+        let top = m("imranfish.xmlextensions", "XML Extensions");
+
         vec![
             core, royalty, biotech, harmony, zebra, apple, early, late, foo, bar, old, cyc_a,
-            cyc_b, bottom, prepatcher,
+            cyc_b, bottom, prepatcher, top,
         ]
     }
 
-    fn rules_with_bottom() -> RulesDb {
+    fn community_rules() -> RulesDb {
         let mut db = RulesDb::default();
         db.rules.insert(
             "krkr.rocketman".into(),
             ModRule {
                 load_bottom: true,
+                ..Default::default()
+            },
+        );
+        db.rules.insert(
+            "imranfish.xmlextensions".into(),
+            ModRule {
+                load_top: true,
                 ..Default::default()
             },
         );
@@ -405,7 +425,7 @@ mod tests {
     #[test]
     fn tiers_put_core_then_expansions_first_and_load_bottom_last() {
         let installed = fixture();
-        let rules = rules_with_bottom();
+        let rules = community_rules();
         // Deliberately scrambled input order.
         let active = ids(&[
             "krkr.rocketman",
@@ -423,6 +443,50 @@ mod tests {
         assert_eq!(r.sorted[2], "ludeon.rimworld.biotech");
         assert_eq!(r.sorted.last().unwrap(), "krkr.rocketman");
         assert_eq!(r.sorted.len(), active.len());
+    }
+
+    #[test]
+    fn load_top_sits_behind_official_content_and_ahead_of_ordinary_mods() {
+        let installed = fixture();
+        let rules = community_rules();
+        let active = ids(&[
+            "krkr.rocketman",
+            "app.apple",
+            "imranfish.xmlextensions",
+            "old.mod",
+            "ludeon.rimworld.biotech",
+            "ludeon.rimworld",
+            "ludeon.rimworld.royalty",
+        ]);
+        let expected = ids(&[
+            "ludeon.rimworld",
+            "ludeon.rimworld.royalty",
+            "ludeon.rimworld.biotech",
+            "imranfish.xmlextensions",
+            "old.mod",   // Ancient Mod
+            "app.apple", // Apple Mod
+            "krkr.rocketman",
+        ]);
+        let r = sort_with(&active, &installed, Some(&rules), None);
+        assert_eq!(r.sorted, expected);
+
+        // "XML Extensions" sorts last by name, so this ordering can only come
+        // from the tier — and it must not depend on input order.
+        let mut reversed = active.clone();
+        reversed.reverse();
+        assert_eq!(sort_with(&reversed, &installed, Some(&rules), None).sorted, expected);
+    }
+
+    #[test]
+    fn load_top_is_ignored_without_the_community_rules_db() {
+        let installed = fixture();
+        let active = ids(&["imranfish.xmlextensions", "app.apple", "ludeon.rimworld"]);
+        let r = sort_with(&active, &installed, None, None);
+        // Falls back to name order among ordinary mods: Apple Mod < XML Extensions.
+        assert_eq!(
+            r.sorted,
+            ids(&["ludeon.rimworld", "app.apple", "imranfish.xmlextensions"])
+        );
     }
 
     #[test]
@@ -457,7 +521,7 @@ mod tests {
     #[test]
     fn community_rules_add_edges() {
         let installed = fixture();
-        let rules = rules_with_bottom();
+        let rules = community_rules();
         let active = ids(&["app.apple", "zed.zebra", "brrainz.harmony"]);
         // Without rules "Apple Mod" sorts before "Zebra Mod" by name…
         let plain = sort_with(&active, &installed, Some(&RulesDb::default()), None);
