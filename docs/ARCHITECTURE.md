@@ -132,6 +132,7 @@ exceptions.** TypeScript mirrors live in `src/lib/types.ts`; typed wrappers in
 
 | Command | Args | Returns | Notes |
 |---|---|---|---|
+| `reveal_path` | `path: String` | `()` | show in system file manager (opener plugin) |
 | `get_settings` | — | `Settings` | |
 | `update_settings` | `settings: Settings` | `Settings` | persists overrides |
 | `detect_paths` | — | `DetectedPaths` | applies overrides on top of detection |

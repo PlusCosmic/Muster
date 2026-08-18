@@ -9,6 +9,11 @@ pub mod shortcuts;
 use models::*;
 
 #[tauri::command]
+async fn reveal_path(path: String) -> Result<(), String> {
+    tauri_plugin_opener::reveal_item_in_dir(&path).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 async fn get_settings() -> Result<Settings, String> {
     settings::get_settings().await
 }
@@ -98,6 +103,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
+            reveal_path,
             get_settings,
             update_settings,
             detect_paths,

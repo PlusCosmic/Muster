@@ -11,6 +11,8 @@ import type {
   SortResult
 } from './types';
 
+export const revealPath = (path: string) => invoke<void>('reveal_path', { path });
+
 export const getSettings = () => invoke<Settings>('get_settings');
 export const updateSettings = (settings: Settings) =>
   invoke<Settings>('update_settings', { settings });
