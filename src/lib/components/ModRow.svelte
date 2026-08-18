@@ -97,6 +97,9 @@
     <span class="pos">{position}</span>
   {/if}
 
+  {#if mod.source === 'official' && !missing}
+    <span class="gem" aria-hidden="true">◆</span>
+  {/if}
   <span class="name truncate">{mod.name}</span>
 
   <span class="meta">
@@ -219,6 +222,13 @@
     flex: 1;
     min-width: 0;
     font-size: 12.5px;
+  }
+
+  .gem {
+    flex: none;
+    margin-right: -2px;
+    font-size: 8px;
+    color: var(--src-official);
   }
 
   .meta {
