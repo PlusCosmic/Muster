@@ -3,8 +3,11 @@
   import '../app.css';
   import DialogHost from '$lib/components/DialogHost.svelte';
   import ToastHost from '$lib/components/ToastHost.svelte';
+  import { theme } from '$lib/stores/theme.svelte';
 
   let { children }: { children: Snippet } = $props();
+
+  theme.apply();
 </script>
 
 {@render children()}

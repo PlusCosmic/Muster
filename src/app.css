@@ -60,6 +60,8 @@
   --font-mono: ui-monospace, 'SF Mono', 'JetBrains Mono', 'Cascadia Mono',
     Menlo, Consolas, monospace;
 
+  --scrollbar-hover: #574d61;
+
   color-scheme: dark;
   font-family: var(--font);
   font-size: 14px;
@@ -69,6 +71,99 @@
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
+}
+
+/* ---------- Themes ----------
+   The bare :root above IS the "rust" theme (also stamped explicitly). Each
+   block below overrides the color tokens only; shape/motion/layout stay put. */
+
+:root[data-theme='slate'] {
+  --bg-app: #14171c;
+  --bg-sunken: #101318;
+  --bg-panel: #1a1e25;
+  --bg-raised: #21262f;
+  --bg-hover: #282e39;
+  --bg-active: #313845;
+  --bg-overlay: rgba(7, 9, 13, 0.68);
+  --border: #2b323d;
+  --border-strong: #3c4553;
+  --border-subtle: #222831;
+  --text: #e7ebf0;
+  --text-muted: #9ea8b5;
+  --text-faint: #6e7883;
+  --text-on-accent: #08131c;
+  --accent: #5b9dd9;
+  --accent-hover: #6fade5;
+  --accent-active: #4a87c0;
+  --accent-soft: rgba(91, 157, 217, 0.16);
+  --accent-line: rgba(91, 157, 217, 0.42);
+  --info: #62b3c4;
+  --info-soft: rgba(98, 179, 196, 0.15);
+  --src-workshop: #8f9fdd;
+  --scrollbar-hover: #4d576a;
+}
+
+:root[data-theme='moss'] {
+  --bg-app: #141813;
+  --bg-sunken: #101410;
+  --bg-panel: #1a1f18;
+  --bg-raised: #212820;
+  --bg-hover: #293127;
+  --bg-active: #323b30;
+  --bg-overlay: rgba(8, 11, 8, 0.68);
+  --border: #2d352a;
+  --border-strong: #3e4a3a;
+  --border-subtle: #232a21;
+  --text: #e9eee6;
+  --text-muted: #a3ad9c;
+  --text-faint: #727c6c;
+  --text-on-accent: #0c1407;
+  --accent: #8aab4c;
+  --accent-hover: #9bbd5c;
+  --accent-active: #78963f;
+  --accent-soft: rgba(138, 171, 76, 0.16);
+  --accent-line: rgba(138, 171, 76, 0.42);
+  --ok: #6fc287;
+  --src-local: #62c4a8;
+  --scrollbar-hover: #4f5c49;
+}
+
+:root[data-theme='parchment'] {
+  --bg-app: #efe6d4;
+  --bg-sunken: #e5dac4;
+  --bg-panel: #f6efe1;
+  --bg-raised: #fdf8ee;
+  --bg-hover: #ece1cb;
+  --bg-active: #e2d4b8;
+  --bg-overlay: rgba(62, 48, 30, 0.4);
+  --border: #d4c5a6;
+  --border-strong: #bfae8c;
+  --border-subtle: #ddd0b6;
+  --text: #3b2f21;
+  --text-muted: #6d5f4b;
+  --text-faint: #94866f;
+  --text-on-accent: #fdf6ea;
+  --accent: #9a4f22;
+  --accent-hover: #ab5c2c;
+  --accent-active: #84421b;
+  --accent-soft: rgba(154, 79, 34, 0.14);
+  --accent-line: rgba(154, 79, 34, 0.4);
+  --danger: #b23c31;
+  --danger-soft: rgba(178, 60, 49, 0.13);
+  --warn: #9c6d13;
+  --warn-soft: rgba(156, 109, 19, 0.14);
+  --ok: #3f7d4e;
+  --ok-soft: rgba(63, 125, 78, 0.14);
+  --info: #33627e;
+  --info-soft: rgba(51, 98, 126, 0.13);
+  --src-official: #7d4e9e;
+  --src-local: #2e7285;
+  --src-workshop: #46589e;
+  --shadow-md: 0 6px 20px rgba(88, 68, 40, 0.22);
+  --shadow-lg: 0 18px 50px rgba(88, 68, 40, 0.3);
+  --scrollbar-hover: #ab9877;
+
+  color-scheme: light;
 }
 
 * {
@@ -126,7 +221,7 @@ p {
   background-clip: content-box;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #574d61;
+  background: var(--scrollbar-hover);
   background-clip: content-box;
 }
 
