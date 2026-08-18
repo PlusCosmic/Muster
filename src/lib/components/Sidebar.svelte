@@ -1,4 +1,5 @@
 <script lang="ts">
+  import logo from '$lib/assets/rimforge.svg';
   import { importDefaultFlow, newProfileFlow } from '$lib/actions';
   import { app } from '$lib/stores/app.svelte';
   import Icon from './Icon.svelte';
@@ -22,7 +23,7 @@
 
 <aside class="sidebar">
   <div class="brand">
-    <span class="mark" aria-hidden="true">RF</span>
+    <img class="mark" src={logo} alt="" />
     <div class="brand-text">
       <span class="app-name">RimForge</span>
       <span class="app-sub">Profile manager</span>
@@ -100,16 +101,9 @@
   }
 
   .mark {
-    display: grid;
-    place-items: center;
+    display: block;
     width: 28px;
     height: 28px;
-    font-size: 11px;
-    font-weight: 800;
-    letter-spacing: 0.02em;
-    color: var(--text-on-accent);
-    background: linear-gradient(150deg, #e08a4c, var(--accent-active));
-    border-radius: 7px;
   }
 
   .brand-text {
