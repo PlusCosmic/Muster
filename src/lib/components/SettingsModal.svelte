@@ -1,6 +1,7 @@
 <script lang="ts">
   import { app } from '$lib/stores/app.svelte';
   import { theme, THEMES } from '$lib/stores/theme.svelte';
+  import { titlebar } from '$lib/stores/titlebar.svelte';
   import { absoluteTime, relativeTime } from '$lib/format';
   import { MOCK_ENABLED } from '$lib/backend';
   import type { Settings } from '$lib/types';
@@ -20,6 +21,7 @@
 
   let draft = $state<Settings>({ ...(app.settings ?? blank) });
   let draftTheme = $state(theme.current);
+  let draftTitlebar = $state(titlebar.current);
   let saving = $state(false);
   let refreshing = $state(false);
 
@@ -28,9 +30,15 @@
     theme.preview(id);
   }
 
-  /** Close without saving: undo any live theme preview. */
+  function previewTitlebar(shown: boolean) {
+    draftTitlebar = shown;
+    titlebar.preview(shown);
+  }
+
+  /** Close without saving: undo any live appearance previews. */
   function cancel() {
     theme.apply();
+    titlebar.apply();
     onclose();
   }
 
@@ -70,7 +78,8 @@
 
   const changed = $derived(
     JSON.stringify(draft) !== JSON.stringify(app.settings ?? blank) ||
-      draftTheme !== theme.current
+      draftTheme !== theme.current ||
+      draftTitlebar !== titlebar.current
   );
 
   async function save() {
@@ -79,6 +88,7 @@
     saving = false;
     if (ok) {
       theme.set(draftTheme);
+      titlebar.set(draftTitlebar);
       onclose();
     }
   }
@@ -113,6 +123,22 @@
           <option value={t.id}>{t.name}</option>
         {/each}
       </select>
+    </div>
+    <div class="field theme-row">
+      <div>
+        <label class="label" for="rf-titlebar">Window title bar</label>
+        <p class="hint">
+          Turn off if your window manager draws its own decorations — or none at all.
+          {#if draftTitlebar !== titlebar.current}— previewing; Save to keep it{/if}
+        </p>
+      </div>
+      <input
+        id="rf-titlebar"
+        type="checkbox"
+        class="check"
+        checked={draftTitlebar}
+        onchange={(e) => previewTitlebar(e.currentTarget.checked)}
+      />
     </div>
   </section>
 
@@ -271,6 +297,15 @@
     background-position: calc(100% - 16px) 55%, calc(100% - 11px) 55%;
     background-size: 5px 5px;
     background-repeat: no-repeat;
+  }
+
+  .check {
+    flex: none;
+    width: 16px;
+    height: 16px;
+    margin-right: 4px;
+    accent-color: var(--accent);
+    cursor: pointer;
   }
 
   .input-row {
