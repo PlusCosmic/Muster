@@ -19,8 +19,20 @@
   };
 
   let draft = $state<Settings>({ ...(app.settings ?? blank) });
+  let draftTheme = $state(theme.current);
   let saving = $state(false);
   let refreshing = $state(false);
+
+  function previewTheme(id: string) {
+    draftTheme = id;
+    theme.preview(id);
+  }
+
+  /** Close without saving: undo any live theme preview. */
+  function cancel() {
+    theme.apply();
+    onclose();
+  }
 
   const fields = [
     {
@@ -57,14 +69,18 @@
   }
 
   const changed = $derived(
-    JSON.stringify(draft) !== JSON.stringify(app.settings ?? blank)
+    JSON.stringify(draft) !== JSON.stringify(app.settings ?? blank) ||
+      draftTheme !== theme.current
   );
 
   async function save() {
     saving = true;
     const ok = await app.updateSettings(draft);
     saving = false;
-    if (ok) onclose();
+    if (ok) {
+      theme.set(draftTheme);
+      onclose();
+    }
   }
 
   async function refreshRules() {
@@ -76,19 +92,22 @@
   const rules = $derived(app.rulesStatus);
 </script>
 
-<Modal title="Settings" subtitle="Path overrides and mod-sorting data" width={620} {onclose}>
+<Modal title="Settings" subtitle="Path overrides and mod-sorting data" width={620} onclose={cancel}>
   <section class="group">
     <h3>Appearance</h3>
     <div class="field theme-row">
       <div>
         <label class="label" for="rf-theme">Theme</label>
-        <p class="hint">{THEMES.find((t) => t.id === theme.current)?.description}</p>
+        <p class="hint">
+          {THEMES.find((t) => t.id === draftTheme)?.description}
+          {#if draftTheme !== theme.current}— previewing; Save to keep it{/if}
+        </p>
       </div>
       <select
         id="rf-theme"
         class="input select"
-        value={theme.current}
-        onchange={(e) => theme.set(e.currentTarget.value)}
+        value={draftTheme}
+        onchange={(e) => previewTheme(e.currentTarget.value)}
       >
         {#each THEMES as t (t.id)}
           <option value={t.id}>{t.name}</option>
@@ -196,7 +215,7 @@
   {/if}
 
   {#snippet footer()}
-    <button class="btn" onclick={onclose}>Cancel</button>
+    <button class="btn" onclick={cancel}>Cancel</button>
     <button class="btn btn-primary" disabled={!changed || saving} onclick={save}>
       {saving ? 'Saving…' : 'Save settings'}
     </button>
