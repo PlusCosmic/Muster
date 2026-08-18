@@ -28,8 +28,25 @@ pub fn expansion_rank(package_id: &str) -> Option<usize> {
     OFFICIAL_EXPANSIONS.iter().position(|e| *e == package_id)
 }
 
-fn about_path(mod_dir: &Path) -> PathBuf {
-    mod_dir.join("About").join("About.xml")
+/// Find `About/About.xml` case-insensitively. RimWorld tolerates any casing
+/// (e.g. Medieval Go-juice ships `About.XML`), which matters on Linux where
+/// the exact-case path simply doesn't exist.
+fn about_path(mod_dir: &Path) -> Option<PathBuf> {
+    let exact = mod_dir.join("About").join("About.xml");
+    if exact.is_file() {
+        return Some(exact);
+    }
+    let find = |parent: &Path, name: &str| -> Option<PathBuf> {
+        std::fs::read_dir(parent).ok()?.flatten().find_map(|e| {
+            e.file_name()
+                .to_str()
+                .is_some_and(|n| n.eq_ignore_ascii_case(name))
+                .then(|| e.path())
+        })
+    };
+    let about_dir = find(mod_dir, "About")?;
+    let file = find(&about_dir, "About.xml")?;
+    file.is_file().then_some(file)
 }
 
 fn to_mod_info(
@@ -58,10 +75,9 @@ fn to_mod_info(
 /// Read one mod directory. `Ok(None)` = not a mod dir (no About.xml) — silent.
 /// `Err` = present but unreadable/malformed — caller logs and skips.
 pub fn read_mod_dir(dir: &Path, source: ModSource) -> Result<Option<ModInfo>, String> {
-    let about_file = about_path(dir);
-    if !about_file.is_file() {
+    let Some(about_file) = about_path(dir) else {
         return Ok(None);
-    }
+    };
     let raw = std::fs::read(&about_file).map_err(|e| format!("{}: {e}", about_file.display()))?;
     // About.xml is nominally utf-8; be lenient about stray bytes.
     let text = String::from_utf8_lossy(&raw);
@@ -169,6 +185,22 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         dir
+    }
+
+    #[test]
+    fn finds_about_xml_case_insensitively() {
+        // Medieval Go-juice ships About/About.XML; RimWorld accepts any casing.
+        let root = temp_root("case");
+        let dir = root.join("GoJuice");
+        std::fs::create_dir_all(dir.join("about")).unwrap();
+        std::fs::write(
+            dir.join("about").join("About.XML"),
+            about_xml("Rince.gaulishgojuice", "Medieval Go-juice"),
+        )
+        .unwrap();
+        let info = read_mod_dir(&dir, ModSource::Local).unwrap().unwrap();
+        assert_eq!(info.package_id, "rince.gaulishgojuice");
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]
