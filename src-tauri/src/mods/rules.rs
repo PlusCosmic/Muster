@@ -309,11 +309,17 @@ mod tests {
         assert!(!rocketman.load_top);
 
         assert!(db.rules["imranfish.xmlextensions"].load_top);
-        assert_eq!(db.rules["3tes.cgtwaa"].load_after, vec!["gt.sam.glittertech"]);
+        assert_eq!(
+            db.rules["3tes.cgtwaa"].load_after,
+            vec!["gt.sam.glittertech"]
+        );
 
         let arch = &db.rules["ferny.betterarchitect"];
         assert_eq!(arch.load_before, vec!["some.other"]);
-        assert_eq!(arch.incompatible_with, vec!["deadmano.rimanoarchitecticons"]);
+        assert_eq!(
+            arch.incompatible_with,
+            vec!["deadmano.rimanoarchitecticons"]
+        );
     }
 
     #[test]

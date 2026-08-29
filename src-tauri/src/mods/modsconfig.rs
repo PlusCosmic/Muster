@@ -266,8 +266,7 @@ mod tests {
 
     #[test]
     fn writes_and_reads_back_from_disk() {
-        let dir = std::env::temp_dir()
-            .join(format!("rimforge-modsconfig-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("rimforge-modsconfig-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let path = mods_config_path(&dir);
         assert!(read_active(&path).unwrap().is_none());
