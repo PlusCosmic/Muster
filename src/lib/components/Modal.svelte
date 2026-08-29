@@ -1,5 +1,20 @@
+<script module lang="ts">
+  // How many modals are mounted, so the shell can tell whether anything is
+  // layered above it. Escape has to dismiss one layer at a time, and the
+  // instance handler below cannot enforce that alone: it and the shell's
+  // handler are both listeners on `window`, where stopPropagation has no
+  // effect between siblings and the shell's is registered first anyway.
+  const mounted = $state({ count: 0 });
+
+  export function anyModalOpen(): boolean {
+    return mounted.count > 0;
+  }
+</script>
+
 <script lang="ts">
+  import { onMount } from 'svelte';
   import type { Snippet } from 'svelte';
+  import { focusFirst, trapTab } from '$lib/focus';
   import Icon from './Icon.svelte';
 
   interface Props {
@@ -25,12 +40,17 @@
 
   let panel = $state<HTMLDivElement | null>(null);
 
+  // onMount rather than $effect: incrementing reads the count, which inside an
+  // effect would make it its own dependency.
+  onMount(() => {
+    mounted.count += 1;
+    return () => {
+      mounted.count -= 1;
+    };
+  });
+
   $effect(() => {
-    if (!panel) return;
-    const target =
-      panel.querySelector<HTMLElement>('[data-autofocus]') ??
-      panel.querySelector<HTMLElement>('input, select, textarea, button');
-    target?.focus();
+    if (panel) focusFirst(panel);
   });
 
   function onkeydown(e: KeyboardEvent) {
@@ -39,23 +59,7 @@
       onclose();
       return;
     }
-    if (e.key !== 'Tab' || !panel) return;
-    const focusables = [
-      ...panel.querySelectorAll<HTMLElement>(
-        'a[href], button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])'
-      )
-    ];
-    if (focusables.length === 0) return;
-    const first = focusables[0];
-    const last = focusables[focusables.length - 1];
-    const active = document.activeElement as HTMLElement | null;
-    if (e.shiftKey && (active === first || !panel.contains(active))) {
-      e.preventDefault();
-      last.focus();
-    } else if (!e.shiftKey && active === last) {
-      e.preventDefault();
-      first.focus();
-    }
+    trapTab(e, panel);
   }
 </script>
 
@@ -123,6 +127,13 @@
     box-shadow: var(--shadow-lg);
     animation: pop 140ms cubic-bezier(0.2, 0.9, 0.3, 1);
     overflow: hidden;
+  }
+
+  /* Narrow windows: the 32px gutter is most of the dialog's width. */
+  @media (max-width: 600px) {
+    .backdrop {
+      padding: 14px;
+    }
   }
 
   header {

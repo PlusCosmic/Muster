@@ -1,15 +1,54 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import { importDefaultFlow, newProfileFlow } from '$lib/actions';
+  import { focusFirst, trapTab } from '$lib/focus';
   import { app } from '$lib/stores/app.svelte';
+  import { layout } from '$lib/stores/layout.svelte';
   import Icon from './Icon.svelte';
+  import { anyModalOpen } from './Modal.svelte';
   import ProfileItem from './ProfileItem.svelte';
 
   interface Props {
+    /** Narrow windows show the sidebar as a drawer over the mod columns. */
+    floating?: boolean;
     onopensettings: () => void;
   }
-  let { onopensettings }: Props = $props();
+  let { floating = false, onopensettings }: Props = $props();
+
+  /** Anything that takes the user to the main pane should get out of the way. */
+  function leave() {
+    if (floating) layout.closeDrawer();
+  }
 
   let filter = $state('');
+  let root = $state<HTMLElement | null>(null);
+
+  // Tab has to stay in the drawer while it covers the page, or it walks the
+  // controls behind the scrim. A modal above the drawer owns Tab instead, the
+  // same way it owns Escape.
+  function onkeydown(e: KeyboardEvent) {
+    if (floating && !anyModalOpen()) trapTab(e, root);
+  }
+
+  // As a drawer this is a layer over the content, so focus has to follow it in:
+  // the trigger that opened it sits behind the scrim, and Tab from there walks
+  // the obscured controls instead of the profile list. Docked, it is just part
+  // of the page and must not steal focus.
+  onMount(() => {
+    if (!floating) return;
+
+    const returnTo = document.activeElement as HTMLElement | null;
+    focusFirst(root);
+
+    return () => {
+      // Only hand focus back if it is still in here. If the user has moved on —
+      // or the window widened and the drawer became the docked column — leave
+      // it where they put it.
+      if (root?.contains(document.activeElement) && returnTo?.isConnected) {
+        returnTo.focus();
+      }
+    };
+  });
 
   const shown = $derived.by(() => {
     const q = filter.trim().toLowerCase();
@@ -20,7 +59,9 @@
   });
 </script>
 
-<aside class="sidebar">
+<svelte:window {onkeydown} />
+
+<aside class="sidebar" class:floating bind:this={root}>
   <div class="brand">
     <!-- Inline copy of assets/rimforge.svg, recolored per theme via the
          mark tokens so it follows live theme previews too. -->
@@ -46,13 +87,25 @@
     <button class="btn btn-ghost btn-icon" title="Settings" onclick={onopensettings}>
       <Icon name="gear" size={16} />
     </button>
+    <button
+      class="btn btn-ghost btn-icon"
+      title={floating ? 'Close profile list (Ctrl+B)' : 'Collapse profile list (Ctrl+B)'}
+      aria-label="Hide profile list"
+      onclick={() => layout.toggleSidebar()}
+    >
+      <Icon name={floating ? 'x' : 'panelLeft'} size={16} />
+    </button>
   </div>
 
   <div class="actions">
-    <button class="btn btn-primary" onclick={newProfileFlow}>
+    <button class="btn btn-primary" onclick={() => { leave(); newProfileFlow(); }}>
       <Icon name="plus" size={14} /> New profile
     </button>
-    <button class="btn" title="Copy your existing RimWorld setup into a profile" onclick={importDefaultFlow}>
+    <button
+      class="btn"
+      title="Copy your existing RimWorld setup into a profile"
+      onclick={() => { leave(); importDefaultFlow(); }}
+    >
       <Icon name="import" size={14} /> Import current setup
     </button>
   </div>
@@ -106,12 +159,30 @@
     border-right: 1px solid var(--border);
   }
 
+  /* Drawer mode: out of the grid, over the content, with a shadow to sell it. */
+  .sidebar.floating {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    z-index: 100;
+    width: min(var(--sidebar-w), 86vw);
+    box-shadow: var(--shadow-lg);
+    animation: rf-slide-in var(--t-med);
+  }
+
+  @keyframes rf-slide-in {
+    from {
+      transform: translateX(-100%);
+    }
+  }
+
   .brand {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 6px;
     height: var(--header-h);
-    padding: 0 10px 0 14px;
+    padding: 0 8px 0 14px;
     border-bottom: 1px solid var(--border-subtle);
   }
 
@@ -135,6 +206,7 @@
     flex: 1;
     min-width: 0;
     display: grid;
+    margin-right: 4px;
   }
   .app-name {
     font-size: 13.5px;
