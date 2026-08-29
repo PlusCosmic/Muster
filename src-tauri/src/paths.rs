@@ -451,7 +451,10 @@ mod tests {
             parse_version("\u{feff}1.5.4104 rev435\r\n").as_deref(),
             Some("1.5.4104 rev435")
         );
-        assert_eq!(parse_version("\n\n1.4.3901 rev1\n").as_deref(), Some("1.4.3901 rev1"));
+        assert_eq!(
+            parse_version("\n\n1.4.3901 rev1\n").as_deref(),
+            Some("1.4.3901 rev1")
+        );
         assert_eq!(parse_version(""), None);
         assert_eq!(parse_version("   \n  \n"), None);
     }

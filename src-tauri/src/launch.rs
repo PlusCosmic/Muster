@@ -23,11 +23,7 @@ fn launch_command(profile_path: &std::path::Path) -> Result<(PathBuf, Vec<String
     {
         Ok((
             PathBuf::from("steam"),
-            vec![
-                "-applaunch".into(),
-                RIMWORLD_APP_ID.into(),
-                arg,
-            ],
+            vec!["-applaunch".into(), RIMWORLD_APP_ID.into(), arg],
         ))
     }
 
@@ -40,10 +36,7 @@ fn launch_command(profile_path: &std::path::Path) -> Result<(PathBuf, Vec<String
         if !exe.exists() {
             return Err(format!("Steam executable not found at {}", exe.display()));
         }
-        Ok((
-            exe,
-            vec!["-applaunch".into(), RIMWORLD_APP_ID.into(), arg],
-        ))
+        Ok((exe, vec!["-applaunch".into(), RIMWORLD_APP_ID.into(), arg]))
     }
 
     #[cfg(target_os = "macos")]

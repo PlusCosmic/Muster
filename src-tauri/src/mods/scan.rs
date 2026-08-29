@@ -149,7 +149,10 @@ pub fn scan_all(game_install: Option<&Path>, workshop_dirs: &[PathBuf]) -> Vec<M
     let mut found: Vec<ModInfo> = Vec::new();
 
     if let Some(install) = game_install {
-        found.extend(scan_mod_container(&install.join("Data"), ModSource::Official));
+        found.extend(scan_mod_container(
+            &install.join("Data"),
+            ModSource::Official,
+        ));
         found.extend(scan_mod_container(&install.join("Mods"), ModSource::Local));
     }
     for wd in workshop_dirs {
@@ -239,7 +242,11 @@ mod tests {
         assert_eq!(info.name, "Royalty");
 
         // Unofficial mods without a <name> still fall back to the packageId.
-        let dir = write_mod(&root, "NoName", "<ModMetaData><packageId>A.B</packageId></ModMetaData>");
+        let dir = write_mod(
+            &root,
+            "NoName",
+            "<ModMetaData><packageId>A.B</packageId></ModMetaData>",
+        );
         let info = read_mod_dir(&dir, ModSource::Local).unwrap().unwrap();
         assert_eq!(info.name, "a.b");
         let _ = std::fs::remove_dir_all(&root);
@@ -249,13 +256,21 @@ mod tests {
     fn scans_all_three_sources_with_precedence_and_workshop_ids() {
         let root = temp_root("sources");
         let install = root.join("RimWorld");
-        write_mod(&install.join("Data"), "Core", &about_xml("Ludeon.RimWorld", "Core"));
+        write_mod(
+            &install.join("Data"),
+            "Core",
+            &about_xml("Ludeon.RimWorld", "Core"),
+        );
         write_mod(
             &install.join("Data"),
             "Biotech",
             &about_xml("Ludeon.RimWorld.Biotech", "Biotech"),
         );
-        write_mod(&install.join("Mods"), "MyMod", &about_xml("Me.Mine", "Mine"));
+        write_mod(
+            &install.join("Mods"),
+            "MyMod",
+            &about_xml("Me.Mine", "Mine"),
+        );
         // Same id as the local mod: local wins, workshop copy is dropped.
         let ws = root.join("294100");
         write_mod(&ws, "123456", &about_xml("Me.Mine", "Mine (Workshop)"));
@@ -301,7 +316,9 @@ mod tests {
     #[test]
     #[ignore = "requires a real RimWorld install; set RIMFORGE_TEST_* env vars"]
     fn real_install_scan() {
-        let install = std::env::var("RIMFORGE_TEST_GAME_INSTALL").ok().map(PathBuf::from);
+        let install = std::env::var("RIMFORGE_TEST_GAME_INSTALL")
+            .ok()
+            .map(PathBuf::from);
         let workshop: Vec<PathBuf> = std::env::var("RIMFORGE_TEST_WORKSHOP")
             .unwrap_or_default()
             .split(':')
@@ -313,9 +330,15 @@ mod tests {
         let mods = scan_all(install.as_deref(), &workshop);
         let elapsed = start.elapsed();
 
-        let official = mods.iter().filter(|m| m.source == ModSource::Official).count();
+        let official = mods
+            .iter()
+            .filter(|m| m.source == ModSource::Official)
+            .count();
         let local = mods.iter().filter(|m| m.source == ModSource::Local).count();
-        let ws = mods.iter().filter(|m| m.source == ModSource::Workshop).count();
+        let ws = mods
+            .iter()
+            .filter(|m| m.source == ModSource::Workshop)
+            .count();
         println!(
             "scanned {} mods in {:?} (official {official}, local {local}, workshop {ws})",
             mods.len(),

@@ -129,9 +129,7 @@ pub fn parse_about(xml: &str) -> Result<AboutData, String> {
                 collect_by_version(node, &mut about.dependencies, collect_dep_ids)
             }
             "loadafter" => collect_li_ids(node, &mut about.load_after),
-            "loadafterbyversion" => {
-                collect_by_version(node, &mut about.load_after, collect_li_ids)
-            }
+            "loadafterbyversion" => collect_by_version(node, &mut about.load_after, collect_li_ids),
             "loadbefore" => collect_li_ids(node, &mut about.load_before),
             "loadbeforebyversion" => {
                 collect_by_version(node, &mut about.load_before, collect_li_ids)
