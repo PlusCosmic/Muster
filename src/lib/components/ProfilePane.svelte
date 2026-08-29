@@ -2,6 +2,7 @@
   import { launchProfileFlow, reloadCurrentFlow, renameProfileFlow } from '$lib/actions';
   import { revealPath } from '$lib/api';
   import { app } from '$lib/stores/app.svelte';
+  import { layout } from '$lib/stores/layout.svelte';
   import { toastError } from '$lib/stores/toasts.svelte';
   import { absoluteTime, relativeTime } from '$lib/format';
   import Icon from './Icon.svelte';
@@ -9,11 +10,24 @@
 
   const profile = $derived(app.selected);
   const busy = $derived(!!profile && app.busyProfileId === profile.id);
+  /** The sidebar is off to the side only while it's docked. */
+  const showSidebarToggle = $derived(!layout.sidebarVisible || layout.sidebarFloating);
 </script>
 
 {#if profile}
   <section class="pane">
     <header class="head">
+      {#if showSidebarToggle}
+        <button
+          class="btn btn-ghost btn-icon reveal"
+          title="Show profiles (Ctrl+B)"
+          aria-label="Show profiles"
+          onclick={() => layout.toggleSidebar()}
+        >
+          <Icon name="menu" size={16} />
+        </button>
+      {/if}
+
       <div class="titles">
         <div class="title-row">
           <h1 class="truncate">{profile.name}</h1>
@@ -26,7 +40,7 @@
           </button>
           {#if app.dirty}
             <span class="dirty" title="These changes are not written to ModsConfig.xml yet">
-              Unsaved changes
+              Unsaved<span class="lbl"> changes</span>
             </span>
           {/if}
         </div>
@@ -54,10 +68,15 @@
           onclick={reloadCurrentFlow}
         >
           <Icon name="refresh" size={14} class={app.loadingActive || app.loadingMods ? 'spin' : ''} />
-          Reload
+          <span class="lbl">Reload</span>
         </button>
-        <button class="btn" disabled={!app.dirty} onclick={() => app.resetDraft()}>
-          <Icon name="undo" size={14} /> Revert
+        <button
+          class="btn"
+          title="Discard unsaved changes"
+          disabled={!app.dirty}
+          onclick={() => app.resetDraft()}
+        >
+          <Icon name="undo" size={14} /> <span class="lbl">Revert</span>
         </button>
         <button
           class="btn save"
@@ -66,7 +85,7 @@
           onclick={() => app.save()}
         >
           <Icon name="save" size={14} />
-          {app.saving ? 'Saving…' : 'Save'}
+          <span class="lbl">{app.saving ? 'Saving…' : 'Save'}</span>
         </button>
         <div class="divider"></div>
         <button
@@ -74,7 +93,7 @@
           disabled={busy}
           onclick={() => launchProfileFlow(profile.id)}
         >
-          <Icon name="play" size={14} /> Launch
+          <Icon name="play" size={14} /> <span class="launch-lbl">Launch</span>
         </button>
       </div>
     </header>
@@ -90,13 +109,21 @@
     flex-direction: column;
     min-width: 0;
     min-height: 0;
+    /* Everything below sizes itself against the pane, not the window, so the
+       layout reacts to the sidebar collapsing as well as to window resizes. */
+    container: pane / inline-size;
+  }
+
+  .reveal {
+    flex: none;
+    margin-left: -4px;
   }
 
   .head {
     flex: none;
     display: flex;
     align-items: center;
-    gap: 16px;
+    gap: 12px;
     min-height: var(--header-h);
     padding: 10px 16px;
     border-bottom: 1px solid var(--border);
@@ -188,4 +215,44 @@
   .launch {
     padding-inline: 16px;
   }
+
+  /* ---------- Tight panes ----------
+     Header controls shed their labels before the profile name has to start
+     losing characters; Launch keeps its label longest since it's the verb
+     people came for. */
+
+  @container pane (max-width: 720px) {
+    .head-actions .lbl {
+      display: none;
+    }
+    .head-actions .btn {
+      padding-inline: 8px;
+    }
+    .divider {
+      display: none;
+    }
+  }
+
+  @container pane (max-width: 520px) {
+    .head {
+      gap: 8px;
+      padding-inline: 10px;
+    }
+    h1 {
+      font-size: 15.5px;
+    }
+    .launch {
+      padding-inline: 10px;
+    }
+    .launch-lbl {
+      display: none;
+    }
+    .rename {
+      display: none;
+    }
+    .dirty .lbl {
+      display: none;
+    }
+  }
 </style>
+

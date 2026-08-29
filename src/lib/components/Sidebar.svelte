@@ -1,13 +1,21 @@
 <script lang="ts">
   import { importDefaultFlow, newProfileFlow } from '$lib/actions';
   import { app } from '$lib/stores/app.svelte';
+  import { layout } from '$lib/stores/layout.svelte';
   import Icon from './Icon.svelte';
   import ProfileItem from './ProfileItem.svelte';
 
   interface Props {
+    /** Narrow windows show the sidebar as a drawer over the mod columns. */
+    floating?: boolean;
     onopensettings: () => void;
   }
-  let { onopensettings }: Props = $props();
+  let { floating = false, onopensettings }: Props = $props();
+
+  /** Anything that takes the user to the main pane should get out of the way. */
+  function leave() {
+    if (floating) layout.closeDrawer();
+  }
 
   let filter = $state('');
 
@@ -20,7 +28,7 @@
   });
 </script>
 
-<aside class="sidebar">
+<aside class="sidebar" class:floating>
   <div class="brand">
     <!-- Inline copy of assets/rimforge.svg, recolored per theme via the
          mark tokens so it follows live theme previews too. -->
@@ -46,13 +54,25 @@
     <button class="btn btn-ghost btn-icon" title="Settings" onclick={onopensettings}>
       <Icon name="gear" size={16} />
     </button>
+    <button
+      class="btn btn-ghost btn-icon"
+      title={floating ? 'Close profile list (Ctrl+B)' : 'Collapse profile list (Ctrl+B)'}
+      aria-label="Hide profile list"
+      onclick={() => layout.toggleSidebar()}
+    >
+      <Icon name={floating ? 'x' : 'panelLeft'} size={16} />
+    </button>
   </div>
 
   <div class="actions">
-    <button class="btn btn-primary" onclick={newProfileFlow}>
+    <button class="btn btn-primary" onclick={() => { leave(); newProfileFlow(); }}>
       <Icon name="plus" size={14} /> New profile
     </button>
-    <button class="btn" title="Copy your existing RimWorld setup into a profile" onclick={importDefaultFlow}>
+    <button
+      class="btn"
+      title="Copy your existing RimWorld setup into a profile"
+      onclick={() => { leave(); importDefaultFlow(); }}
+    >
       <Icon name="import" size={14} /> Import current setup
     </button>
   </div>
@@ -106,12 +126,30 @@
     border-right: 1px solid var(--border);
   }
 
+  /* Drawer mode: out of the grid, over the content, with a shadow to sell it. */
+  .sidebar.floating {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    z-index: 100;
+    width: min(var(--sidebar-w), 86vw);
+    box-shadow: var(--shadow-lg);
+    animation: rf-slide-in var(--t-med);
+  }
+
+  @keyframes rf-slide-in {
+    from {
+      transform: translateX(-100%);
+    }
+  }
+
   .brand {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 6px;
     height: var(--header-h);
-    padding: 0 10px 0 14px;
+    padding: 0 8px 0 14px;
     border-bottom: 1px solid var(--border-subtle);
   }
 
@@ -135,6 +173,7 @@
     flex: 1;
     min-width: 0;
     display: grid;
+    margin-right: 4px;
   }
   .app-name {
     font-size: 13.5px;

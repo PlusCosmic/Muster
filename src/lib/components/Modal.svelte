@@ -125,6 +125,13 @@
     overflow: hidden;
   }
 
+  /* Narrow windows: the 32px gutter is most of the dialog's width. */
+  @media (max-width: 600px) {
+    .backdrop {
+      padding: 14px;
+    }
+  }
+
   header {
     display: flex;
     align-items: flex-start;

@@ -2,6 +2,7 @@
 // components so the sidebar, header and empty states all behave identically.
 
 import { app } from './stores/app.svelte';
+import { layout } from './stores/layout.svelte';
 import { dialogs } from './stores/dialogs.svelte';
 
 function suggestCopyName(name: string): string {
@@ -98,7 +99,10 @@ export async function createShortcutFlow(id: string): Promise<void> {
 
 /** Switch profiles, confirming first if the mod-list draft is dirty. */
 export async function selectProfileGuarded(id: string): Promise<void> {
-  if (id === app.selectedId) return;
+  if (id === app.selectedId) {
+    layout.closeDrawer();
+    return;
+  }
   if (app.dirty) {
     const from = app.selected?.name ?? 'this profile';
     const ok = await dialogs.confirm({
@@ -110,6 +114,7 @@ export async function selectProfileGuarded(id: string): Promise<void> {
     });
     if (!ok) return;
   }
+  layout.closeDrawer();
   await app.selectProfile(id);
 }
 
