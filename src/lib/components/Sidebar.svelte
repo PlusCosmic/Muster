@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import { importDefaultFlow, newProfileFlow } from '$lib/actions';
   import { app } from '$lib/stores/app.svelte';
   import { layout } from '$lib/stores/layout.svelte';
@@ -18,6 +19,29 @@
   }
 
   let filter = $state('');
+  let root = $state<HTMLElement | null>(null);
+
+  // As a drawer this is a layer over the content, so focus has to follow it in:
+  // the trigger that opened it sits behind the scrim, and Tab from there walks
+  // the obscured controls instead of the profile list. Docked, it is just part
+  // of the page and must not steal focus.
+  onMount(() => {
+    if (!floating) return;
+
+    const returnTo = document.activeElement as HTMLElement | null;
+    root
+      ?.querySelector<HTMLElement>('a[href], button:not(:disabled), input:not(:disabled)')
+      ?.focus();
+
+    return () => {
+      // Only hand focus back if it is still in here. If the user has moved on —
+      // or the window widened and the drawer became the docked column — leave
+      // it where they put it.
+      if (root?.contains(document.activeElement) && returnTo?.isConnected) {
+        returnTo.focus();
+      }
+    };
+  });
 
   const shown = $derived.by(() => {
     const q = filter.trim().toLowerCase();
@@ -28,7 +52,7 @@
   });
 </script>
 
-<aside class="sidebar" class:floating>
+<aside class="sidebar" class:floating bind:this={root}>
   <div class="brand">
     <!-- Inline copy of assets/rimforge.svg, recolored per theme via the
          mark tokens so it follows live theme previews too. -->
