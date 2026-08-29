@@ -157,8 +157,8 @@ pub fn load_registry() -> Result<Registry, String> {
 pub fn save_registry(reg: &Registry) -> Result<(), String> {
     let path = registry_path();
     ensure_dir(&data_root())?;
-    let json =
-        serde_json::to_string_pretty(reg).map_err(|e| format!("could not serialise registry: {e}"))?;
+    let json = serde_json::to_string_pretty(reg)
+        .map_err(|e| format!("could not serialise registry: {e}"))?;
     let tmp = path.with_extension("json.tmp");
     fs::write(&tmp, json).map_err(|e| format!("could not write {}: {e}", tmp.display()))?;
     fs::rename(&tmp, &path).map_err(|e| format!("could not write {}: {e}", path.display()))?;
@@ -543,7 +543,13 @@ mod tests {
         }
         assert_eq!(
             produced,
-            vec!["test-run", "test-run-2", "test-run-3", "test-run-4", "test-run-5"]
+            vec![
+                "test-run",
+                "test-run-2",
+                "test-run-3",
+                "test-run-4",
+                "test-run-5"
+            ]
         );
     }
 
@@ -607,10 +613,9 @@ mod tests {
         assert_eq!(back.profiles[0].id, "vanilla");
 
         // Tolerates an older/partial record without lastPlayedAtMs.
-        let partial: Registry = serde_json::from_str(
-            r#"{"profiles":[{"id":"a","name":"A","createdAtMs":1}]}"#,
-        )
-        .unwrap();
+        let partial: Registry =
+            serde_json::from_str(r#"{"profiles":[{"id":"a","name":"A","createdAtMs":1}]}"#)
+                .unwrap();
         assert_eq!(partial.profiles[0].last_played_at_ms, None);
         // And an empty file body.
         let empty: Registry = serde_json::from_str("{}").unwrap();
@@ -639,7 +644,9 @@ mod tests {
             let b = create_profile("Smoke Test".into()).await.unwrap();
             assert_eq!(b.id, "smoke-test-2");
 
-            let renamed = rename_profile(a.id.clone(), "Renamed".into()).await.unwrap();
+            let renamed = rename_profile(a.id.clone(), "Renamed".into())
+                .await
+                .unwrap();
             assert_eq!(renamed.id, "smoke-test");
             assert_eq!(renamed.name, "Renamed");
 
@@ -647,7 +654,9 @@ mod tests {
             fs::create_dir_all(profile_dir(&a.id).join("Saves")).unwrap();
             fs::write(profile_dir(&a.id).join("Saves/Colony.rws"), "<savegame/>").unwrap();
 
-            let cloned = clone_profile(a.id.clone(), "Cloned Run".into()).await.unwrap();
+            let cloned = clone_profile(a.id.clone(), "Cloned Run".into())
+                .await
+                .unwrap();
             assert_eq!(cloned.id, "cloned-run");
             assert_eq!(cloned.save_count, 1);
             assert_eq!(cloned.active_mod_count, 1);
@@ -658,7 +667,11 @@ mod tests {
             assert!(find_profile("nope").await.is_err());
 
             touch_last_played(&a.id).unwrap();
-            assert!(find_profile(&a.id).await.unwrap().last_played_at_ms.is_some());
+            assert!(find_profile(&a.id)
+                .await
+                .unwrap()
+                .last_played_at_ms
+                .is_some());
 
             for id in [a.id.clone(), b.id.clone(), cloned.id.clone()] {
                 delete_profile(id.clone()).await.unwrap();
@@ -767,15 +780,24 @@ mod tests {
         let dst = base.join("dst");
         copy_tree_following_symlinks(&src, &dst, 0).unwrap();
 
-        assert_eq!(fs::read_to_string(dst.join("nested/a.txt")).unwrap(), "hello");
+        assert_eq!(
+            fs::read_to_string(dst.join("nested/a.txt")).unwrap(),
+            "hello"
+        );
         #[cfg(unix)]
         {
             // Copied as a real file, not as a symlink.
             let copied = dst.join("link.txt");
             assert_eq!(fs::read_to_string(&copied).unwrap(), "linked contents");
-            assert!(!fs::symlink_metadata(&copied).unwrap().file_type().is_symlink());
+            assert!(!fs::symlink_metadata(&copied)
+                .unwrap()
+                .file_type()
+                .is_symlink());
             let copied_dir = dst.join("linkdir");
-            assert!(!fs::symlink_metadata(&copied_dir).unwrap().file_type().is_symlink());
+            assert!(!fs::symlink_metadata(&copied_dir)
+                .unwrap()
+                .file_type()
+                .is_symlink());
             assert_eq!(
                 fs::read_to_string(copied_dir.join("linked.txt")).unwrap(),
                 "linked contents"

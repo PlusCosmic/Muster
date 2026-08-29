@@ -116,10 +116,12 @@ pub fn sort_with(
             }
         }
 
-        let declared = info
-            .incompatible_with
-            .iter()
-            .chain(rule_of(id).map(|r| r.incompatible_with.iter()).into_iter().flatten());
+        let declared = info.incompatible_with.iter().chain(
+            rule_of(id)
+                .map(|r| r.incompatible_with.iter())
+                .into_iter()
+                .flatten(),
+        );
         for other in declared {
             if !active_set.contains(other.as_str()) || other == id {
                 continue;
@@ -474,7 +476,10 @@ mod tests {
         // from the tier — and it must not depend on input order.
         let mut reversed = active.clone();
         reversed.reverse();
-        assert_eq!(sort_with(&reversed, &installed, Some(&rules), None).sorted, expected);
+        assert_eq!(
+            sort_with(&reversed, &installed, Some(&rules), None).sorted,
+            expected
+        );
     }
 
     #[test]
@@ -492,13 +497,23 @@ mod tests {
     #[test]
     fn only_explicitly_constrained_mods_may_precede_core() {
         let installed = fixture();
-        let active = ids(&["app.apple", "old.mod", "zetrith.prepatcher", "ludeon.rimworld"]);
+        let active = ids(&[
+            "app.apple",
+            "old.mod",
+            "zetrith.prepatcher",
+            "ludeon.rimworld",
+        ]);
         let r = sort_with(&active, &installed, None, None);
         // Prepatcher declares loadBefore Core, so it (and only it) goes first;
         // the unconstrained mods stay behind Core rather than filling the gap.
         assert_eq!(
             r.sorted,
-            ids(&["zetrith.prepatcher", "ludeon.rimworld", "old.mod", "app.apple"])
+            ids(&[
+                "zetrith.prepatcher",
+                "ludeon.rimworld",
+                "old.mod",
+                "app.apple"
+            ])
         );
     }
 
@@ -562,7 +577,10 @@ mod tests {
         // Deterministic across input orders.
         let mut reversed = active.clone();
         reversed.reverse();
-        assert_eq!(sort_with(&reversed, &installed, None, None).sorted, r.sorted);
+        assert_eq!(
+            sort_with(&reversed, &installed, None, None).sorted,
+            r.sorted
+        );
     }
 
     #[test]
