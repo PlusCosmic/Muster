@@ -74,7 +74,10 @@ pub fn desktop_entry(name: &str, profile_path: &Path) -> String {
 /// Contents of the macOS `.app` stub's `Contents/MacOS/launch` script.
 pub fn macos_launch_script(profile_path: &Path) -> String {
     // Single-quote the path and escape any embedded single quotes.
-    let quoted = format!("'{}'", profile_path.display().to_string().replace('\'', r"'\''"));
+    let quoted = format!(
+        "'{}'",
+        profile_path.display().to_string().replace('\'', r"'\''")
+    );
     format!(
         "#!/bin/sh\nexec open -a Steam --args -applaunch {RIMWORLD_APP_ID} -savedatafolder={quoted}\n"
     )
@@ -146,9 +149,12 @@ fn create_shortcut_impl(profile: &Profile, dir: &Path) -> Result<PathBuf, String
     fs::create_dir_all(&programs)
         .map_err(|e| format!("could not create {}: {e}", programs.display()))?;
 
-    let path = programs.join(format!("{}.lnk", sanitize_filename(&shortcut_title(&profile.name))));
-    let mut link =
-        ShellLink::new(&exe).map_err(|e| format!("could not build shortcut for {}: {e}", exe.display()))?;
+    let path = programs.join(format!(
+        "{}.lnk",
+        sanitize_filename(&shortcut_title(&profile.name))
+    ));
+    let mut link = ShellLink::new(&exe)
+        .map_err(|e| format!("could not build shortcut for {}: {e}", exe.display()))?;
     link.set_arguments(Some(format!(
         "-applaunch {RIMWORLD_APP_ID} \"-savedatafolder={}\"",
         dir.display()
@@ -229,9 +235,8 @@ mod tests {
         let body = desktop_entry("Medieval Overhaul", Path::new("/p/medieval overhaul"));
         assert!(body.starts_with("[Desktop Entry]\n"));
         assert!(body.contains("Name=RimWorld — Medieval Overhaul\n"));
-        assert!(body.contains(
-            "Exec=steam -applaunch 294100 \"-savedatafolder=/p/medieval overhaul\"\n"
-        ));
+        assert!(body
+            .contains("Exec=steam -applaunch 294100 \"-savedatafolder=/p/medieval overhaul\"\n"));
         assert!(body.contains("Type=Application\n"));
         assert!(body.contains("Terminal=false\n"));
     }
