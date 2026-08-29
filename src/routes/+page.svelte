@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import EmptyState from '$lib/components/EmptyState.svelte';
   import Icon from '$lib/components/Icon.svelte';
+  import { anyModalOpen } from '$lib/components/Modal.svelte';
   import ProfilePane from '$lib/components/ProfilePane.svelte';
   import SettingsModal from '$lib/components/SettingsModal.svelte';
   import Sidebar from '$lib/components/Sidebar.svelte';
@@ -18,7 +19,8 @@
 
   function onkeydown(e: KeyboardEvent) {
     const mod = e.ctrlKey || e.metaKey;
-    if (e.key === 'Escape' && layout.narrow && layout.drawerOpen) {
+    // A modal is above the drawer, so it gets the keystroke to itself.
+    if (e.key === 'Escape' && !anyModalOpen() && layout.narrow && layout.drawerOpen) {
       layout.closeDrawer();
     } else if (mod && e.key.toLowerCase() === 'b') {
       e.preventDefault();
