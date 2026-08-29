@@ -2,21 +2,30 @@
   import { onMount } from 'svelte';
   import EmptyState from '$lib/components/EmptyState.svelte';
   import Icon from '$lib/components/Icon.svelte';
+  import { anyModalOpen } from '$lib/components/Modal.svelte';
   import ProfilePane from '$lib/components/ProfilePane.svelte';
   import SettingsModal from '$lib/components/SettingsModal.svelte';
   import Sidebar from '$lib/components/Sidebar.svelte';
   import { app } from '$lib/stores/app.svelte';
+  import { layout } from '$lib/stores/layout.svelte';
   import { newProfileFlow } from '$lib/actions';
 
   let settingsOpen = $state(false);
 
   onMount(() => {
     app.init();
+    return layout.watch();
   });
 
   function onkeydown(e: KeyboardEvent) {
     const mod = e.ctrlKey || e.metaKey;
-    if (mod && e.key.toLowerCase() === 's') {
+    // A modal is above the drawer, so it gets the keystroke to itself.
+    if (e.key === 'Escape' && !anyModalOpen() && layout.narrow && layout.drawerOpen) {
+      layout.closeDrawer();
+    } else if (mod && e.key.toLowerCase() === 'b') {
+      e.preventDefault();
+      layout.toggleSidebar();
+    } else if (mod && e.key.toLowerCase() === 's') {
       e.preventDefault();
       if (app.dirty && !app.saving) app.save();
     } else if (mod && e.key === ',') {
@@ -37,8 +46,15 @@
 
 <svelte:window {onkeydown} {onbeforeunload} />
 
-<div class="shell">
-  <Sidebar onopensettings={() => (settingsOpen = true)} />
+<div class="shell" class:solo={!layout.sidebarVisible || layout.sidebarFloating}>
+  {#if layout.sidebarVisible}
+    <Sidebar floating={layout.sidebarFloating} onopensettings={() => (settingsOpen = true)} />
+  {/if}
+  {#if layout.sidebarFloating && layout.drawerOpen}
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div class="scrim" onclick={() => layout.closeDrawer()}></div>
+  {/if}
 
   {#if app.booting}
     <div class="boot">
@@ -52,10 +68,21 @@
   {:else}
     <div class="boot">
       <Icon name="folder" size={24} />
-      <span>Select a profile from the left, or create a new one.</span>
-      <button class="btn btn-primary" onclick={newProfileFlow}>
-        <Icon name="plus" size={14} /> New profile
-      </button>
+      <span>
+        {layout.sidebarVisible
+          ? 'Select a profile from the left, or create a new one.'
+          : 'Open the profile list, or create a new one.'}
+      </span>
+      <div class="boot-actions">
+        {#if !layout.sidebarVisible}
+          <button class="btn" onclick={() => layout.toggleSidebar()}>
+            <Icon name="panelLeft" size={14} /> Show profiles
+          </button>
+        {/if}
+        <button class="btn btn-primary" onclick={newProfileFlow}>
+          <Icon name="plus" size={14} /> New profile
+        </button>
+      </div>
     </div>
   {/if}
 </div>
@@ -73,6 +100,32 @@
     min-height: 0;
     overflow: hidden;
     background: var(--bg-app);
+  }
+
+  /* Sidebar collapsed, or floating over the content as a drawer: the main
+     pane gets the whole width. */
+  .shell.solo {
+    grid-template-areas: 'main';
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .scrim {
+    position: fixed;
+    inset: 0;
+    z-index: 90;
+    background: var(--bg-overlay);
+    animation: rf-fade var(--t-med);
+  }
+
+  @keyframes rf-fade {
+    from {
+      opacity: 0;
+    }
+  }
+
+  .boot-actions {
+    display: flex;
+    gap: 8px;
   }
 
   .boot {

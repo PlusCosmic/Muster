@@ -298,4 +298,16 @@
     color: var(--text-faint);
     opacity: 1;
   }
+
+  /* Single-column mode (see ModListEditor): the two lists aren't both on
+     screen, so dragging between them is awkward — keep the move buttons
+     permanently visible instead of revealing them on hover. */
+  @container editor (max-width: 780px) {
+    .actions {
+      opacity: 1;
+    }
+    .grip {
+      opacity: 1;
+    }
+  }
 </style>

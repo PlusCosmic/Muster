@@ -385,6 +385,14 @@ p {
   }
 }
 
+/* Medium windows: buy back a little width for the mod columns before the
+   sidebar gives up and becomes a drawer (see stores/layout.svelte.ts). */
+@media (max-width: 1320px) {
+  :root {
+    --sidebar-w: 236px;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   * {
     animation-duration: 0.01ms !important;

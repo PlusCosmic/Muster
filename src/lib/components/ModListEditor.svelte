@@ -12,6 +12,10 @@
   let sourceFilter = $state<'all' | ModSource>('all');
   let mismatchOnly = $state(false);
 
+  /* Which list is on screen when the pane is too narrow for both. Ignored by
+     the CSS at comfortable widths, so it costs nothing there. */
+  let pane = $state<Column>('active');
+
   let drag = $state<{ packageId: string; from: Column; fromIndex: number } | null>(null);
   let dropAt = $state<{ column: Column; index: number; edge: Edge } | null>(null);
   let overColumn = $state<Column | null>(null);
@@ -141,10 +145,42 @@
 </script>
 
 <div class="editor">
-  <div class="columns">
+  <!-- Only rendered as a control strip when the columns collapse to one; see
+       the container query at the bottom of this file. -->
+  <div class="tabs" role="tablist" aria-label="Mod lists">
+    <button
+      class="tab"
+      class:on={pane === 'inactive'}
+      role="tab"
+      aria-selected={pane === 'inactive'}
+      onclick={() => (pane = 'inactive')}
+      ondragover={() => (pane = 'inactive')}
+    >
+      Inactive
+      <span class="tab-n">{filteredInactive.length}</span>
+    </button>
+    <button
+      class="tab"
+      class:on={pane === 'active'}
+      role="tab"
+      aria-selected={pane === 'active'}
+      onclick={() => (pane = 'active')}
+      ondragover={() => (pane = 'active')}
+    >
+      Active
+      <span class="tab-n">{visibleActive.length}</span>
+      {#if mismatchCount > 0}
+        <span class="tab-warn" title="{mismatchCount} version mismatches">
+          <Icon name="alert" size={11} />
+        </span>
+      {/if}
+    </button>
+  </div>
+
+  <div class="columns" data-pane={pane}>
     <!-- ---------------- Inactive ---------------- -->
     <section
-      class="column"
+      class="column col-inactive"
       class:drop-target={overColumn === 'inactive' && drag?.from === 'active'}
       ondragover={(e) => onColumnDragOver(e, 'inactive')}
       ondrop={(e) => onColumnDrop(e, 'inactive')}
@@ -228,7 +264,7 @@
 
     <!-- ---------------- Active ---------------- -->
     <section
-      class="column"
+      class="column col-active"
       class:drop-target={overColumn === 'active' && drag !== null}
       ondragover={(e) => onColumnDragOver(e, 'active')}
       ondrop={(e) => onColumnDrop(e, 'active')}
@@ -313,6 +349,58 @@
     flex-direction: column;
     gap: 10px;
     padding: 12px 16px 16px;
+    /* The rows and the column split both size against the editor rather than
+       the window, so collapsing the sidebar widens them immediately. */
+    container: editor / inline-size;
+  }
+
+  .tabs {
+    display: none;
+    gap: 4px;
+    padding: 3px;
+    background: var(--bg-sunken);
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
+  }
+  .tab {
+    flex: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 5px 10px;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+    background: transparent;
+    border: none;
+    border-radius: var(--r-sm);
+    cursor: pointer;
+    transition: background var(--t-fast), color var(--t-fast);
+  }
+  .tab:hover {
+    color: var(--text);
+  }
+  .tab.on {
+    color: var(--text);
+    background: var(--bg-raised);
+  }
+  .tab-n {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    font-weight: 500;
+    letter-spacing: 0;
+    padding: 1px 5px;
+    color: var(--text-faint);
+    background: var(--bg-app);
+    border-radius: 99px;
+  }
+  .tab-warn {
+    display: inline-flex;
+    color: var(--warn);
   }
 
   .columns {
@@ -487,9 +575,51 @@
     color: var(--text-faint);
   }
 
-  @media (max-width: 980px) {
+  /* ---------- One column at a time ----------
+     Below this width two side-by-side lists would truncate every mod name, so
+     the pane shows one list and the segmented control switches between them.
+     Rows stay in the DOM (hidden, not unmounted) so a drag that starts in one
+     list survives switching to the other — hovering a tab mid-drag flips the
+     view, and dropping still lands on the right list. */
+
+  @container editor (max-width: 780px) {
+    .tabs {
+      display: flex;
+    }
     .columns {
-      grid-template-columns: 1fr;
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .columns[data-pane='active'] .col-inactive,
+    .columns[data-pane='inactive'] .col-active {
+      display: none;
+    }
+    /* The tab strip already names the list and carries its count. */
+    .column > header h3,
+    .column > header .count,
+    .column > header .warn-pill {
+      display: none;
+    }
+    .column > header {
+      padding-left: 8px;
+    }
+    .order-hint {
+      display: none;
+    }
+    .toolbar {
+      padding: 7px 8px;
+    }
+  }
+
+  @container editor (max-width: 420px) {
+    .toolbar {
+      flex-wrap: wrap;
+    }
+    .chips {
+      flex: 1;
+    }
+    .chip {
+      flex: 1;
+      justify-content: center;
     }
   }
 </style>
