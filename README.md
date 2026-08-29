@@ -48,3 +48,7 @@ if the command surface changes, that file changes in the same commit.
 
 All rights reserved — see `LICENSE`. The source is public to read, not to reuse.
 
+## Releasing
+
+Every merge to `main` runs the checks above and, if they pass, publishes an Arch
+package to a private pacman repository. See `docs/RELEASING.md`.
