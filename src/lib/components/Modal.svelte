@@ -1,4 +1,18 @@
+<script module lang="ts">
+  // How many modals are mounted, so the shell can tell whether anything is
+  // layered above it. Escape has to dismiss one layer at a time, and the
+  // instance handler below cannot enforce that alone: it and the shell's
+  // handler are both listeners on `window`, where stopPropagation has no
+  // effect between siblings and the shell's is registered first anyway.
+  const mounted = $state({ count: 0 });
+
+  export function anyModalOpen(): boolean {
+    return mounted.count > 0;
+  }
+</script>
+
 <script lang="ts">
+  import { onMount } from 'svelte';
   import type { Snippet } from 'svelte';
   import Icon from './Icon.svelte';
 
@@ -24,6 +38,15 @@
   }: Props = $props();
 
   let panel = $state<HTMLDivElement | null>(null);
+
+  // onMount rather than $effect: incrementing reads the count, which inside an
+  // effect would make it its own dependency.
+  onMount(() => {
+    mounted.count += 1;
+    return () => {
+      mounted.count -= 1;
+    };
+  });
 
   $effect(() => {
     if (!panel) return;
