@@ -1,9 +1,11 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { importDefaultFlow, newProfileFlow } from '$lib/actions';
+  import { focusFirst, trapTab } from '$lib/focus';
   import { app } from '$lib/stores/app.svelte';
   import { layout } from '$lib/stores/layout.svelte';
   import Icon from './Icon.svelte';
+  import { anyModalOpen } from './Modal.svelte';
   import ProfileItem from './ProfileItem.svelte';
 
   interface Props {
@@ -21,6 +23,13 @@
   let filter = $state('');
   let root = $state<HTMLElement | null>(null);
 
+  // Tab has to stay in the drawer while it covers the page, or it walks the
+  // controls behind the scrim. A modal above the drawer owns Tab instead, the
+  // same way it owns Escape.
+  function onkeydown(e: KeyboardEvent) {
+    if (floating && !anyModalOpen()) trapTab(e, root);
+  }
+
   // As a drawer this is a layer over the content, so focus has to follow it in:
   // the trigger that opened it sits behind the scrim, and Tab from there walks
   // the obscured controls instead of the profile list. Docked, it is just part
@@ -29,9 +38,7 @@
     if (!floating) return;
 
     const returnTo = document.activeElement as HTMLElement | null;
-    root
-      ?.querySelector<HTMLElement>('a[href], button:not(:disabled), input:not(:disabled)')
-      ?.focus();
+    focusFirst(root);
 
     return () => {
       // Only hand focus back if it is still in here. If the user has moved on —
@@ -51,6 +58,8 @@
     );
   });
 </script>
+
+<svelte:window {onkeydown} />
 
 <aside class="sidebar" class:floating bind:this={root}>
   <div class="brand">
