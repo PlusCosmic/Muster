@@ -7,11 +7,12 @@ script, and no timer — a machine changes only when `pacman -Syu` runs.
 ## How it works
 
 `.github/workflows/release.yml` runs the definition-of-done suite on every merge
-to `main` — `npm run check`, `npm run build`, and `cargo check`, `clippy`,
-`test --lib` and `fmt --check` in `src-tauri/`. Only if all of that passes does
-it send a `repository_dispatch` to [PlusCosmic/packages], carrying the package
-name, this repository, the merged commit SHA, and the version from
-`src-tauri/tauri.conf.json`.
+to `main` — `npm run check` and `npm run build` in `frontend/`, a check that the
+committed `frontend/bindings` match what `wails3 generate bindings` produces,
+then `gofmt`, `go vet`, `go test` and a production `go build` with the `gtk3`
+tag. Only if all of that passes does it send a `repository_dispatch` to
+[PlusCosmic/packages], carrying the package name, this repository, the merged
+commit SHA, and the version from `build/config.yml`.
 
 The dispatch also refuses to run for anything but the current tip of `main`.
 `pkgrel` is the packaging repository's run number, so *any* dispatch outranks
@@ -31,21 +32,34 @@ repository gives one concurrency group that actually serialises them.
 
 The packaging repository builds from `git archive` of the dispatched SHA, so a
 package can only ever contain committed source — a dirty working tree is never
-packaged. It installs the `--no-bundle` binary (the frontend embedded, no
-deb/AppImage bundler), the hicolor icons, and
-`/usr/share/applications/dev.pluscosmic.rimforge.desktop`.
+packaged. It installs the bare binary (the frontend embedded, no AppImage or
+nfpm bundler), the hicolor icons, and
+`/usr/share/applications/dev.pluscosmic.rimforge.desktop`. The build it runs is
+the same one the workflow verifies:
+
+```sh
+cd frontend && npm ci && npm run build && cd ..
+go build -tags gtk3,production -trimpath -buildvcs=false -ldflags="-w -s" -o rimforge .
+```
+
+with `go`, `nodejs`, `npm`, `webkit2gtk-4.1` and `gtk3` as build dependencies
+(`webkit2gtk-4.1` and `gtk3` at run time). No `wails3` CLI is needed to build:
+the bindings it generates are committed. The `%u` in the Wails-generated
+`build/linux/desktop` is for URL handling this app does not do; the packaging
+repository's own desktop file is the one that ships.
 
 `pkgrel` is the packaging repository's Actions run number rather than a
 hand-maintained counter, so each build is an upgrade to pacman even when the
-`tauri.conf.json` version is unchanged. Bump that version for anything users
-should recognise as a release; `package.json` tracks it but is not what the
-dispatch reads.
+`build/config.yml` version is unchanged. Bump that version for anything users
+should recognise as a release; `frontend/package.json` tracks it but is not
+what the dispatch reads.
 
 ## Versioning
 
-`src-tauri/tauri.conf.json` is the version of record. Keep `package.json` and
-`src-tauri/Cargo.toml` in step with it when you bump — nothing enforces that
-today.
+`build/config.yml` (`info.version`) is the version of record. Keep
+`frontend/package.json` and `internal/version/version.go` (the User-Agent sent
+to the community rules database) in step with it when you bump — nothing
+enforces that today.
 
 ## Installing
 
