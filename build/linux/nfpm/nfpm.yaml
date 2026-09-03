@@ -12,8 +12,8 @@ priority: "extra"
 maintainer: ${GIT_COMMITTER_NAME} <${GIT_COMMITTER_EMAIL}>
 description: "Profile and mod list manager for RimWorld"
 vendor: "PlusCosmic"
-homepage: "https://wails.io"
-license: "MIT"
+homepage: "https://github.com/PlusCosmic/rimforge"
+license: "All rights reserved"
 release: "1"
 
 contents:
@@ -24,24 +24,26 @@ contents:
   - src: "./build/linux/rimforge.desktop"
     dst: "/usr/share/applications/rimforge.desktop"
 
-# Default dependencies for the GTK4 + WebKitGTK 6.0 stack (Ubuntu 24.04+ / Debian 13+)
+# Linux builds pass the gtk3 tag (see Taskfile.yml), so the binary links
+# GTK3 + WebKit2GTK 4.1 and the packages must depend on that stack, not the
+# GTK4 + WebKitGTK 6.0 one Wails defaults to.
 depends:
-  - libgtk-4-1
-  - libwebkitgtk-6.0-4
+  - libgtk-3-0
+  - libwebkit2gtk-4.1-0
 
 # Distribution-specific overrides for different package formats
 overrides:
   # RPM packages for Fedora / RHEL / AlmaLinux / Rocky Linux
   rpm:
     depends:
-      - gtk4
-      - webkitgtk6.0
+      - gtk3
+      - webkit2gtk4.1
 
   # Arch Linux packages
   archlinux:
     depends:
-      - gtk4
-      - webkitgtk-6.0
+      - gtk3
+      - webkit2gtk-4.1
 
 # scripts section to ensure desktop database is updated after install
 scripts:
@@ -50,21 +52,21 @@ scripts:
   # preremove: "./build/linux/nfpm/scripts/preremove.sh"
   # postremove: "./build/linux/nfpm/scripts/postremove.sh"
 
-# If you build your app with -tags gtk3 (legacy WebKit2GTK 4.1 stack — supported through v3.0.x, removed in v3.1),
-# replace the depends/overrides above with these:
+# If the build ever drops the gtk3 tag (Wails removes it in v3.1), switch the
+# depends/overrides above to the GTK4 + WebKitGTK 6.0 stack:
 #
 # depends:
-#   - libgtk-3-0
-#   - libwebkit2gtk-4.1-0
+#   - libgtk-4-1
+#   - libwebkitgtk-6.0-4
 # overrides:
 #   rpm:
 #     depends:
-#       - gtk3
-#       - webkit2gtk4.1
+#       - gtk4
+#       - webkitgtk6.0
 #   archlinux:
 #     depends:
-#       - gtk3
-#       - webkit2gtk-4.1
+#       - gtk4
+#       - webkitgtk-6.0
 #
 # replaces:
 #   - foobar
