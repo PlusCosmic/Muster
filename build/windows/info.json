@@ -1,0 +1,15 @@
+{
+	"fixed": {
+		"file_version": "0.1.0"
+	},
+	"info": {
+		"0000": {
+			"ProductVersion": "0.1.0",
+			"CompanyName": "PlusCosmic",
+			"FileDescription": "Profile and mod list manager for RimWorld",
+			"LegalCopyright": "(c) 2026, Harry Leach",
+			"ProductName": "RimForge",
+			"Comments": "https://github.com/PlusCosmic/RimForge"
+		}
+	}
+}
