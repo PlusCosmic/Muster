@@ -153,30 +153,41 @@ func MigrateLegacy() (bool, error) {
 // migrateInPlace moves them. The two that count as evidence of RimForge data
 // (see hasRimForgeData) go last, so that a run which dies part-way always
 // leaves at least one of them behind and the next run resumes; once they are
-// gone, everything before them is gone too. `settings.json` alone is not
-// evidence, because Muster keeps its own common settings.json at the root.
+// gone, everything before them is gone too.
 var legacyEntries = []string{"settings.json", "cache", "registry.json", "profiles"}
 
-// hasRimForgeData reports whether dir holds RimForge's registry or profiles —
-// the entries that mean there is something worth migrating.
-func hasRimForgeData(dir string) bool {
-	for _, name := range []string{"registry.json", "profiles"} {
-		if _, err := os.Stat(filepath.Join(dir, name)); err == nil {
+func anyExists(dir string, names []string) bool {
+	for _, name := range names {
+		if _, err := os.Lstat(filepath.Join(dir, name)); err == nil {
 			return true
 		}
 	}
 	return false
 }
 
+// hasRimForgeData reports whether dir holds RimForge's registry or profiles.
+// `settings.json` and `cache/` alone are not proof once Muster has run in a
+// directory, because Muster keeps its own common settings.json at the root.
+func hasRimForgeData(dir string) bool {
+	return anyExists(dir, []string{"registry.json", "profiles"})
+}
+
 // migrateInPlace moves RimForge's entries at root into root/rimworld, one
 // rename each. Entries already gone from the root are skipped, so a run that
 // stopped part-way resumes; an entry present on both sides is an error rather
 // than a guess.
+//
+// The gate: the registry or profiles at the root always mean RimForge data.
+// Before Muster has ever run here (no `rimworld/` yet), a settings file or
+// cache at the root is RimForge's too — an install that saved path overrides
+// but never made a profile — and is migrated as well.
 func migrateInPlace(root string) (bool, error) {
-	if !hasRimForgeData(root) {
+	dst := filepath.Join(root, string(RimWorld))
+	_, dstErr := os.Stat(dst)
+	neverRan := os.IsNotExist(dstErr)
+	if !hasRimForgeData(root) && !(neverRan && anyExists(root, legacyEntries)) {
 		return false, nil
 	}
-	dst := filepath.Join(root, string(RimWorld))
 	if err := EnsureDir(dst); err != nil {
 		return false, err
 	}

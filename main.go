@@ -30,10 +30,13 @@ func main() {
 	}
 
 	// Adopt a RimForge (the RimWorld-only predecessor) data directory before
-	// anything reads from the data root. A failed migration is not fatal: the
-	// app starts empty and the old directory is left intact for a retry.
+	// anything reads from the data root. A failed migration stops the app:
+	// running on with a half-moved root would let the user write new data
+	// there, and the next start would then refuse (or skip) the retry. The
+	// legacy directory is left intact and the migration resumes next start.
 	if moved, err := appdir.MigrateLegacy(); err != nil {
-		log.Printf("muster: legacy data migration failed: %v", err)
+		log.Fatalf("muster: could not migrate the RimForge data directory: %v\n"+
+			"Close anything using it and start Muster again; nothing has been lost.", err)
 	} else if moved {
 		log.Printf("muster: migrated RimForge data to %s", appdir.GameRoot(appdir.RimWorld))
 	}
