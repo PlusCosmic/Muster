@@ -59,7 +59,10 @@ it before anything renders (the `modules` store,
 `lib/shell/stores/modules.svelte.ts`); the root route then goes to `/welcome`,
 which introduces the app, asks which games to show, and preselects the
 modules that already have data on disk (`AppInfo.gamesWithData`, so an
-upgrade from a build that showed every game never hides one in use). The rail
+upgrade from a build that showed every game never hides one in use). A
+relocated root (`RIMFORGE_DATA_DIR`) holds this file beside the game roots;
+the legacy migration tells it from a RimForge `settings.json` by its `games`
+key and leaves it alone. The rail
 is hidden until at least one game is on. The button at the end of the rail
 opens the same picker as a dialog for adding or removing games later; turning
 off the game on screen moves to the first one still on. Data under a game
@@ -132,7 +135,7 @@ Each game's `frontend/src/lib/<game>/types.ts` narrows the generated
 |---|---|---|---|
 | `RevealPath` | `path` | — | show in system file manager (`Env.OpenFileManager`) |
 | `GetAppInfo` | — | `AppInfo` | `{ version, dataRoot, selfUpdates, gamesWithData }` |
-| `GetSettings` | — | `AppSettings` | which game modules are on; empty ⇒ first run |
+| `GetSettings` | — | `AppSettings` | which game modules are on; missing file ⇒ empty ⇒ first run; a file that cannot be read is an error |
 | `UpdateSettings` | `settings: AppSettings` | `AppSettings` | persists; unknown ids dropped, the rest echoed in rail order |
 | `CheckForUpdates` | — | `bool` | is a newer release available; when it is, the update window opens and installs it; a failed check is an error; always false unless `selfUpdates` |
 

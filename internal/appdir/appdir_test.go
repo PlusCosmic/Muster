@@ -143,6 +143,52 @@ func TestMigrateLegacyInPlaceMigratesSettingsOnlyRoot(t *testing.T) {
 	}
 }
 
+func TestMigrateLegacyInPlaceLeavesAppSettingsInFreshRoot(t *testing.T) {
+	// A relocated root where the user picked only Minecraft on the welcome
+	// screen: Muster's settings.json exists, the RimWorld root does not. The
+	// file is not RimForge's and must not be moved.
+	root := t.TempDir()
+	t.Setenv(EnvDataDir, "")
+	t.Setenv(EnvLegacyDataDir, root)
+	if err := os.WriteFile(filepath.Join(root, "settings.json"), []byte(`{"games":["minecraft"]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if moved, err := MigrateLegacy(); err != nil || moved {
+		t.Fatalf("%v, %v", moved, err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "settings.json")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "rimworld")); !os.IsNotExist(err) {
+		t.Fatalf("rimworld root should not have been created: %v", err)
+	}
+}
+
+func TestMigrateLegacyInPlaceMovesRimForgeSettingsButNotMustersAlongsideMarkers(t *testing.T) {
+	// RimForge data at the root plus Muster's own settings.json (an old
+	// backup restored over a live root): the RimForge entries move, Muster's
+	// file stays.
+	base := t.TempDir()
+	root := seedLegacy(t, base, "registry.json")
+	if err := os.WriteFile(filepath.Join(root, "settings.json"), []byte(`{"games":["rimworld"]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(EnvDataDir, "")
+	t.Setenv(EnvLegacyDataDir, root)
+	if moved, err := MigrateLegacy(); err != nil || !moved {
+		t.Fatalf("%v, %v", moved, err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "rimworld", "registry.json")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "settings.json")); err != nil {
+		t.Fatalf("Muster's settings.json should stay: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "rimworld", "settings.json")); !os.IsNotExist(err) {
+		t.Fatalf("Muster's settings.json must not become RimWorld's: %v", err)
+	}
+}
+
 func TestMigrateLegacyInPlaceRefusesConflicts(t *testing.T) {
 	base := t.TempDir()
 	root := seedLegacy(t, base, "registry.json", "rimworld/registry.json")

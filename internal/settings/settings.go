@@ -41,23 +41,27 @@ func Normalize(s models.AppSettings) models.AppSettings {
 	return s
 }
 
-// Load reads settings.json. Missing ⇒ zero value. Malformed ⇒ zero value plus
-// a warning on stderr (a corrupt settings file must never brick the app).
-func Load() models.AppSettings {
+// Load reads settings.json. Missing ⇒ zero value: first run. A file that
+// exists but cannot be read is an error, not a first run — the frontend
+// would otherwise send the user back through the welcome screen and
+// overwrite (or fail to overwrite) a choice that is still there. Malformed ⇒
+// zero value plus a warning on stderr: a corrupt settings file must never
+// brick the app, and the welcome screen rewrites it.
+func Load() (models.AppSettings, error) {
 	path := Path()
 	raw, err := os.ReadFile(path)
 	if err != nil {
-		if !errors.Is(err, os.ErrNotExist) {
-			log.Printf("muster: could not read %s: %v", path, err)
+		if errors.Is(err, os.ErrNotExist) {
+			return Normalize(models.AppSettings{}), nil
 		}
-		return Normalize(models.AppSettings{})
+		return models.AppSettings{}, fmt.Errorf("could not read %s: %w", path, err)
 	}
 	var s models.AppSettings
 	if err := json.Unmarshal(raw, &s); err != nil {
 		log.Printf("muster: malformed %s: %v", path, err)
-		return Normalize(models.AppSettings{})
+		return Normalize(models.AppSettings{}), nil
 	}
-	return Normalize(s)
+	return Normalize(s), nil
 }
 
 // Save writes settings.json atomically, creating the data root if needed.
@@ -74,7 +78,7 @@ func Save(s models.AppSettings) error {
 }
 
 // Get is the `GetSettings` command body.
-func Get() (models.AppSettings, error) { return Load(), nil }
+func Get() (models.AppSettings, error) { return Load() }
 
 // Update is the `UpdateSettings` command body: normalise, persist, echo back.
 func Update(s models.AppSettings) (models.AppSettings, error) {

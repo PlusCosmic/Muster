@@ -15,6 +15,7 @@
 package appdir
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -140,8 +141,12 @@ func legacyRoot() string { return filepath.Join(filepath.Dir(DataRoot()), legacy
 // last, so a run that dies part-way always leaves one behind for the next run
 // to pick up. Once Muster has run (the destination exists) a lone
 // settings.json or cache/ is no longer taken as RimForge's, because Muster
-// keeps its own common settings.json at the root. An entry present on both
-// sides is an error rather than a guess. Returns whether anything was moved.
+// keeps its own settings.json at the root; and a root settings.json that
+// holds Muster's settings (a `games` key, which RimForge never wrote) is
+// never RimForge's, however fresh the root — the user may have picked only
+// Minecraft, so the RimWorld root need not exist yet. An entry present on
+// both sides is an error rather than a guess. Returns whether anything was
+// moved.
 func MigrateLegacy() (bool, error) {
 	src := legacyRoot()
 	if rootFromLegacyEnv() {
@@ -166,20 +171,41 @@ func anyExists(dir string, names []string) bool {
 	return false
 }
 
+// isAppSettings reports whether the file at path is Muster's own root
+// settings.json rather than a RimForge one: Muster's has a top-level `games`
+// key, RimForge's only ever had path overrides. Unreadable or malformed ⇒
+// false, and the usual rules decide.
+func isAppSettings(path string) bool {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return false
+	}
+	var keys map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &keys); err != nil {
+		return false
+	}
+	_, ok := keys["games"]
+	return ok
+}
+
 func migrateEntries(src, dst string) (bool, error) {
 	if info, err := os.Stat(src); err != nil || !info.IsDir() {
 		return false, nil
 	}
 	_, dstErr := os.Stat(dst)
 	neverRan := os.IsNotExist(dstErr)
-	if !anyExists(src, legacyMarkers) && !(neverRan && anyExists(src, legacyEntries)) {
+	entries := legacyEntries
+	if isAppSettings(filepath.Join(src, "settings.json")) {
+		entries = entries[1:] // Muster's, not RimForge's: stays put
+	}
+	if !anyExists(src, legacyMarkers) && !(neverRan && anyExists(src, entries)) {
 		return false, nil
 	}
 	if err := EnsureDir(dst); err != nil {
 		return false, err
 	}
 	moved := false
-	for _, name := range legacyEntries {
+	for _, name := range entries {
 		from := filepath.Join(src, name)
 		if _, err := os.Lstat(from); err != nil {
 			if os.IsNotExist(err) {
