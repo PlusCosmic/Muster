@@ -7,7 +7,7 @@ export type { AppInfo };
 
 export const revealPath = (path: string): Promise<void> => App.RevealPath(path);
 export const getAppInfo = (): Promise<AppInfo> => App.GetAppInfo();
-export const checkForUpdates = (): Promise<void> => App.CheckForUpdates();
+export const checkForUpdates = (): Promise<boolean> => App.CheckForUpdates();
 
 /** Open a URL in the system browser (a new tab when running in a plain browser). */
 export async function openExternal(url: string): Promise<void> {

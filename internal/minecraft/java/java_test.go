@@ -14,15 +14,29 @@ import (
 	"testing"
 )
 
-func touch(t *testing.T, p string) {
+// touch creates a fake java that reports the given major version (21 by
+// default) when run with -version, so FromLauncher's version check passes.
+func touch(t *testing.T, p string, major ...int) {
 	t.Helper()
+	v := 21
+	if len(major) > 0 {
+		v = major[0]
+	}
 	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(p, []byte("#!/bin/sh\n"), 0o755); err != nil {
+	script := "#!/bin/sh\necho 'openjdk version \"" + map[bool]string{true: "1.8.0_392", false: ""}[v == 8]
+	if v != 8 {
+		script = "#!/bin/sh\necho 'openjdk version \"" + itoa(v) + ".0.1\" 2024-01-16' >&2\n"
+	} else {
+		script += "\" 2023-10-17' >&2\n"
+	}
+	if err := os.WriteFile(p, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
 }
+
+func itoa(n int) string { return string(rune('0'+n/10)) + string(rune('0'+n%10)) }
 
 func TestFromLauncherPrefersNewestComponent(t *testing.T) {
 	mc := t.TempDir()
@@ -30,15 +44,37 @@ func TestFromLauncherPrefersNewestComponent(t *testing.T) {
 	touch(t, filepath.Join(mc, "runtime", "java-runtime-gamma", "linux", "java-runtime-gamma", "bin", exe))
 	touch(t, filepath.Join(mc, "runtime", "java-runtime-delta", "linux", "java-runtime-delta", "bin", exe))
 	touch(t, filepath.Join(mc, "runtime", "java-runtime-delta", "mac-os", "java-runtime-delta", "jre.bundle", "Contents", "Home", "bin", exe))
-	rt, ok := FromLauncher(mc)
+	if runtime.GOOS == "windows" {
+		t.Skip("fake java is a shell script")
+	}
+	rt, ok := FromLauncher(context.Background(), mc)
 	if !ok || rt.Source != "launcher" || !filepath.IsAbs(rt.Path) {
 		t.Fatalf("%+v %v", rt, ok)
 	}
-	if filepath.Base(filepath.Dir(filepath.Dir(rt.Path))) != "java-runtime-delta" && !bytes.Contains([]byte(rt.Path), []byte("java-runtime-delta")) {
+	if !bytes.Contains([]byte(rt.Path), []byte("java-runtime-delta")) {
 		t.Fatalf("expected delta, got %s", rt.Path)
 	}
-	if _, ok := FromLauncher(t.TempDir()); ok {
+	if _, ok := FromLauncher(context.Background(), t.TempDir()); ok {
 		t.Fatal("empty dir should have no runtime")
+	}
+}
+
+func TestFromLauncherSkipsTooOldRuntimes(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake java is a shell script")
+	}
+	mc := t.TempDir()
+	exe := exeName()
+	// Only jre-legacy (Java 8) is bundled: not good enough for a loader installer.
+	touch(t, filepath.Join(mc, "runtime", "jre-legacy", "linux", "jre-legacy", "bin", exe), 8)
+	if rt, ok := FromLauncher(context.Background(), mc); ok {
+		t.Fatalf("Java 8 must be skipped, got %+v", rt)
+	}
+	// A newer one alongside is picked even though the legacy one sorts first.
+	touch(t, filepath.Join(mc, "runtime", "java-runtime-gamma", "linux", "java-runtime-gamma", "bin", exe), 17)
+	rt, ok := FromLauncher(context.Background(), mc)
+	if !ok || !bytes.Contains([]byte(rt.Path), []byte("gamma")) {
+		t.Fatalf("%+v %v", rt, ok)
 	}
 }
 
@@ -46,9 +82,9 @@ func TestFromRuntimeRootMatchesStoreLayout(t *testing.T) {
 	root := t.TempDir()
 	exe := exeName()
 	touch(t, filepath.Join(root, "java-runtime-epsilon", "windows-x64", "java-runtime-epsilon", "bin", exe))
-	rt, ok := fromRuntimeRoot(root)
-	if !ok || !bytes.Contains([]byte(rt.Path), []byte("epsilon")) {
-		t.Fatalf("%+v %v", rt, ok)
+	cands := candidatesIn(root)
+	if len(cands) != 1 || !bytes.Contains([]byte(cands[0]), []byte("epsilon")) {
+		t.Fatalf("%v", cands)
 	}
 	if runtime.GOOS == "windows" {
 		t.Setenv("LOCALAPPDATA", root)
@@ -107,8 +143,9 @@ func zipBytes(t *testing.T, files map[string]string) []byte {
 func TestProvisionExtractsAndStripsTopDir(t *testing.T) {
 	exe := exeName()
 	archives := map[string][]byte{
-		"/jre.tar.gz": tarGz(t, map[string]string{"jdk-21.0.1+1-jre/bin/" + exe: "java", "jdk-21.0.1+1-jre/release": "x", "jdk-21.0.1+1-jre/../evil": "no"}),
-		"/jre.zip":    zipBytes(t, map[string]string{"jdk-21.0.1+1-jre/bin/" + exe: "java", "jdk-21.0.1+1-jre/lib/a": "x"}),
+		"/jre.tar.gz":     tarGz(t, map[string]string{"jdk-21.0.1+1-jre/bin/" + exe: "java", "jdk-21.0.1+1-jre/release": "x", "jdk-21.0.1+1-jre/../evil": "no"}),
+		"/jre.zip":        zipBytes(t, map[string]string{"jdk-21.0.1+1-jre/bin/" + exe: "java", "jdk-21.0.1+1-jre/lib/a": "x"}),
+		"/jre-mac.tar.gz": tarGz(t, map[string]string{"jdk-21.0.1+1-jre/Contents/Home/bin/" + exe: "java", "jdk-21.0.1+1-jre/Contents/Info.plist": "x"}),
 	}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/latest" {
@@ -131,6 +168,14 @@ func TestProvisionExtractsAndStripsTopDir(t *testing.T) {
 		}
 		if rt.Source != "downloaded" || rt.Path != filepath.Join(root, "jre-21", "bin", exe) {
 			t.Fatalf("%+v", rt)
+		}
+		if os_ == "linux" {
+			// macOS layout: the archive is an app bundle.
+			macRoot := t.TempDir()
+			mrt, err := provisionFrom(context.Background(), srv.Client(), "t", srv.URL+"/jre-mac.tar.gz", macRoot, nil)
+			if err != nil || mrt.Path != filepath.Join(macRoot, "jre-21", "Contents", "Home", "bin", exe) {
+				t.Fatalf("mac layout: %+v %v", mrt, err)
+			}
 		}
 		if _, err := os.Stat(filepath.Join(root, "evil")); !os.IsNotExist(err) {
 			t.Fatal("path escape must be dropped")

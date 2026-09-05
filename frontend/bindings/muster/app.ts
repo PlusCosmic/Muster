@@ -18,10 +18,12 @@ import { Call as $Call, CancellablePromise as $CancellablePromise } from "@wails
 import * as models$0 from "./internal/models/models.js";
 
 /**
- * CheckForUpdates opens the update window, checks for a newer release and
- * installs it if there is one. No-op when SelfUpdates is false.
+ * CheckForUpdates looks for a newer release and reports whether one exists;
+ * when it does, the update window opens and installs it. A failed check (no
+ * network, bad manifest) is returned so the UI can say so. Always false when
+ * SelfUpdates is false.
  */
-export function CheckForUpdates(): $CancellablePromise<void> {
+export function CheckForUpdates(): $CancellablePromise<boolean> {
     return $Call.ByID(2675659504);
 }
 

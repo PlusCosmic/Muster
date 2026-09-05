@@ -4,7 +4,7 @@
   import Icon from './Icon.svelte';
   import { checkForUpdates, getAppInfo, type AppInfo } from '$lib/shell/api';
   import { MOCK_ENABLED } from '$lib/shell/mock';
-  import { toastError } from '$lib/shell/stores/toasts.svelte';
+  import { toastError, toastInfo } from '$lib/shell/stores/toasts.svelte';
 
   let info = $state<AppInfo | null>(null);
   let checking = $state(false);
@@ -24,12 +24,13 @@
   async function check() {
     checking = true;
     try {
-      if (!MOCK_ENABLED) await checkForUpdates();
+      const found = MOCK_ENABLED ? false : await checkForUpdates();
+      if (!found) toastInfo("You're up to date", `Muster ${info?.version ?? ''} is the latest version.`);
+      // Otherwise the update window has opened and takes over from here.
     } catch (e) {
       toastError('Could not check for updates', e);
     } finally {
-      // The update window takes over from here; re-enable after a moment.
-      setTimeout(() => (checking = false), 1500);
+      checking = false;
     }
   }
 </script>

@@ -216,6 +216,16 @@ func (s *Service) SyncPack(id string) (models.SyncReport, error) {
 	if err != nil {
 		return models.SyncReport{}, err
 	}
+	// Everything that can be rejected is rejected before a byte moves: a pack
+	// whose loader the launcher cannot represent must not be half-applied.
+	mcDir := minecraftDir(loadSettings())
+	if mcDir == "" {
+		return models.SyncReport{}, errors.New("the Minecraft launcher's folder is unknown — set it in Settings")
+	}
+	loaderName, loaderVersion := res.Pack.Loader()
+	if _, err := launcher.VersionID(res.Pack.Versions["minecraft"], loaderName, loaderVersion); err != nil {
+		return models.SyncReport{}, err
+	}
 	plan := packwiz.MakePlan(res, dir, state, nil)
 	rep, err := pw.Apply(ctx, res, dir, plan, p.PackURL, func(done, total int, e packwiz.Entry) {
 		s.publish(SyncEvent, models.SyncProgress{ID: id, Phase: "files", Done: done, Total: total, Current: e.Name})
@@ -228,15 +238,10 @@ func (s *Service) SyncPack(id string) (models.SyncReport, error) {
 		return out, err
 	}
 
-	mcDir := minecraftDir(loadSettings())
-	if mcDir == "" {
-		return out, errors.New("the Minecraft launcher's folder is unknown — set it in Settings")
-	}
 	if err := appdir.EnsureDir(mcDir); err != nil {
 		return out, err
 	}
 
-	loaderName, loaderVersion := res.Pack.Loader()
 	step := func(msg string) {
 		s.publish(SyncEvent, models.SyncProgress{ID: id, Phase: "loader", Current: msg})
 	}

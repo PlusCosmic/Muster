@@ -13,9 +13,10 @@ import (
 // Every method here is a command in docs/ARCHITECTURE.md; `wails3 generate
 // bindings` turns them into the typed TypeScript in frontend/bindings.
 type App struct {
-	// checkForUpdates opens the update window and installs any newer release;
-	// nil when this build has no update source (dev builds, the Arch package).
-	checkForUpdates func()
+	// checkForUpdates looks for a newer release, reporting whether one exists
+	// (and starting its install when it does); nil when this build does not
+	// update itself (dev builds, the Arch package).
+	checkForUpdates func() (bool, error)
 }
 
 // RevealPath shows a path in the system file manager.
@@ -29,12 +30,13 @@ func (a *App) GetAppInfo() (models.AppInfo, error) {
 	return models.AppInfo{Version: version.Version, DataRoot: appdir.DataRoot(), SelfUpdates: a.checkForUpdates != nil}, nil
 }
 
-// CheckForUpdates opens the update window, checks for a newer release and
-// installs it if there is one. No-op when SelfUpdates is false.
-func (a *App) CheckForUpdates() error {
+// CheckForUpdates looks for a newer release and reports whether one exists;
+// when it does, the update window opens and installs it. A failed check (no
+// network, bad manifest) is returned so the UI can say so. Always false when
+// SelfUpdates is false.
+func (a *App) CheckForUpdates() (bool, error) {
 	if a.checkForUpdates == nil {
-		return nil
+		return false, nil
 	}
-	a.checkForUpdates()
-	return nil
+	return a.checkForUpdates()
 }

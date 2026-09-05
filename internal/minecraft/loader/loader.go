@@ -160,7 +160,7 @@ func writeVersion(minecraftDir, id string, raw []byte) error {
 	if err := json.Unmarshal(raw, &v); err != nil {
 		return fmt.Errorf("version json for %s: %w", id, err)
 	}
-	if v.ID != "" && v.ID != id {
+	if v.ID != id {
 		return fmt.Errorf("meta server returned version %q, expected %q", v.ID, id)
 	}
 	dir := filepath.Join(minecraftDir, "versions", id)
@@ -204,9 +204,17 @@ func (i *Installer) runInstaller(ctx context.Context, minecraftDir, url, workDir
 			return err
 		}
 	}
-	before, err := profileKeys(profiles)
-	if err != nil {
-		return err
+	// Snapshot every profiles file separately: the installer may touch either,
+	// and an entry that already existed in one must not be removed from it
+	// because it was new in the other.
+	files := launcher.ProfilesFiles(minecraftDir)
+	before := map[string]map[string]bool{}
+	for _, name := range files {
+		keys, err := profileKeys(filepath.Join(minecraftDir, name))
+		if err != nil {
+			return err
+		}
+		before[name] = keys
 	}
 
 	say("Running installer")
@@ -217,21 +225,30 @@ func (i *Installer) runInstaller(ctx context.Context, minecraftDir, url, workDir
 	// Also drop the installer's own log if it left one beside the jar.
 	_ = os.Remove(jar + ".log")
 
-	after, err := profileKeys(profiles)
-	if err != nil {
-		return err
-	}
-	var injected []string
-	for k := range after {
-		if !before[k] {
-			injected = append(injected, k)
+	for _, name := range files {
+		after, err := profileKeys(filepath.Join(minecraftDir, name))
+		if err != nil {
+			return err
+		}
+		var injected []string
+		for k := range after {
+			if !before[name][k] {
+				injected = append(injected, k)
+			}
+		}
+		if err := launcher.RemoveKeysFrom(minecraftDir, name, injected); err != nil {
+			return err
 		}
 	}
-	return launcher.RemoveKeys(minecraftDir, injected)
+	return nil
 }
 
+// profileKeys lists the profile keys in a profiles file; a missing file has none.
 func profileKeys(path string) (map[string]bool, error) {
 	raw, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return map[string]bool{}, nil
+	}
 	if err != nil {
 		return nil, err
 	}
