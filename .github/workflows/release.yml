@@ -199,7 +199,8 @@ jobs:
           # prompt, where the updater can swap the exe without elevation.
           makensis -DWAILS_INSTALL_SCOPE=user -DREQUEST_EXECUTION_LEVEL=user \
             -DARG_WAILS_AMD64_BINARY="$PWD/../../../bin/muster.exe" project.nsi
-          mv ../../../bin/muster-amd64-installer.exe ../../../bin/Muster-installer.exe
+          # OutFile is ${INFO_PROJECTNAME}-${ARCH}-installer.exe, and the project name is "Muster".
+          mv ../../../bin/Muster-amd64-installer.exe ../../../bin/Muster-installer.exe
 
       - name: Sign the update manifest
         if: steps.version.outputs.publish == 'true'
