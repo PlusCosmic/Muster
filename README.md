@@ -6,9 +6,10 @@ with friends and keeping them in sync. One shell, one game module per game:
 - **RimWorld**: profiles — isolated `-savedatafolder` directories, each with its
   own mod list, mod settings and saves, sharing one installed game and Workshop
   library — with a mod list editor and RimSort-style auto-sort.
-- **Minecraft** (in progress): pull a manifest of shared modpacks and set the
-  chosen one up as a profile in the official Minecraft launcher, kept up to date
-  from its packwiz source.
+- **Minecraft** (in progress): pull a manifest of shared packwiz modpacks, sync
+  the chosen one into its own directory, and register it as a profile in the
+  official Minecraft launcher. Backend done; loader installation and the UI
+  are next.
 
 Muster grew out of RimForge, its RimWorld-only predecessor, and adopts a
 RimForge data directory on first start.
