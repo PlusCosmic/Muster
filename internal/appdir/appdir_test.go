@@ -19,8 +19,66 @@ func TestDataRootDefaultsToMusterDir(t *testing.T) {
 func TestEnvOverridesRoot(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv(EnvDataDir, dir)
+	t.Setenv(EnvLegacyDataDir, filepath.Join(dir, "ignored"))
 	if DataRoot() != dir {
 		t.Fatalf("got %s", DataRoot())
+	}
+}
+
+func TestLegacyEnvIsHonouredWhenNewOneIsUnset(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv(EnvDataDir, "")
+	t.Setenv(EnvLegacyDataDir, dir)
+	if DataRoot() != dir {
+		t.Fatalf("got %s", DataRoot())
+	}
+}
+
+func TestMigrateLegacyMovesRelocatedRootInPlace(t *testing.T) {
+	base := t.TempDir()
+	root := seedLegacy(t, base, "registry.json", "settings.json", "profiles/vanilla/Config/ModsConfig.xml", "cache/communityRules.json")
+	t.Setenv(EnvDataDir, "")
+	t.Setenv(EnvLegacyDataDir, root)
+
+	moved, err := MigrateLegacy()
+	if err != nil || !moved {
+		t.Fatalf("MigrateLegacy: %v, %v", moved, err)
+	}
+	for _, f := range []string{"registry.json", "settings.json", "profiles/vanilla/Config/ModsConfig.xml", "cache/communityRules.json"} {
+		if _, err := os.Stat(filepath.Join(root, "rimworld", f)); err != nil {
+			t.Fatalf("%s not migrated: %v", f, err)
+		}
+		if _, err := os.Stat(filepath.Join(root, f)); !os.IsNotExist(err) {
+			t.Fatalf("%s should have moved: %v", f, err)
+		}
+	}
+	if GameRoot(RimWorld) != filepath.Join(root, "rimworld") {
+		t.Fatalf("got %s", GameRoot(RimWorld))
+	}
+	if moved, err := MigrateLegacy(); err != nil || moved {
+		t.Fatalf("second run: %v, %v", moved, err)
+	}
+}
+
+func TestMigrateLegacyInPlaceLeavesNewLayoutAlone(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv(EnvDataDir, "")
+	t.Setenv(EnvLegacyDataDir, root)
+	// Already in Muster's layout, plus a stray legacy-looking file: don't touch.
+	for _, f := range []string{"rimworld/registry.json", "settings.json"} {
+		p := filepath.Join(root, f)
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if moved, err := MigrateLegacy(); err != nil || moved {
+		t.Fatalf("%v, %v", moved, err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "settings.json")); err != nil {
+		t.Fatal(err)
 	}
 }
 

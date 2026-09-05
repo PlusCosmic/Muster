@@ -70,7 +70,9 @@ During `npm run dev`, appending `?mock=1` to the URL swaps in a fixture
 backend so the UI can be worked on in a plain browser.
 
 `MUSTER_DATA_DIR` overrides the data root (`~/.local/share/muster` by
-default) — used by the tests to avoid touching real data.
+default) — used by the tests to avoid touching real data. RimForge's
+`RIMFORGE_DATA_DIR` still works when the new variable is unset; the directory
+it names is migrated in place on first start.
 
 The backend↔frontend contract lives in `docs/ARCHITECTURE.md` and is binding:
 if a command surface changes, that file changes in the same commit.

@@ -9,7 +9,9 @@
 // What lives inside a game root is that module's business (see
 // internal/rimworld/paths for RimWorld's layout). MUSTER_DATA_DIR, when set,
 // replaces the whole root. It exists so tests (and anyone relocating their
-// data) can point the app at another disk.
+// data) can point the app at another disk. RIMFORGE_DATA_DIR, the
+// predecessor's equivalent, is honoured as a fallback so an installation that
+// relocated its data keeps finding it; see MigrateLegacy.
 package appdir
 
 import (
@@ -36,6 +38,10 @@ const legacyDirName = "rimforge"
 
 // EnvDataDir is the environment variable that replaces the data root.
 const EnvDataDir = "MUSTER_DATA_DIR"
+
+// EnvLegacyDataDir is RimForge's data-root override. When set and EnvDataDir
+// is not, it is the data root: the directory it names is migrated in place.
+const EnvLegacyDataDir = "RIMFORGE_DATA_DIR"
 
 // dataDir mirrors the Rust `dirs::data_dir()` this app was built on:
 // $XDG_DATA_HOME (~/.local/share) on Linux, ~/Library/Application Support on
@@ -79,7 +85,15 @@ func DataRoot() string {
 	if dir := os.Getenv(EnvDataDir); dir != "" {
 		return dir
 	}
+	if dir := os.Getenv(EnvLegacyDataDir); dir != "" {
+		return dir
+	}
 	return filepath.Join(baseDir(), dirName)
+}
+
+// rootFromLegacyEnv reports whether the data root comes from RIMFORGE_DATA_DIR.
+func rootFromLegacyEnv() bool {
+	return os.Getenv(EnvDataDir) == "" && os.Getenv(EnvLegacyDataDir) != ""
 }
 
 // GameRoot is `<data>/muster/<game>` — root of everything one game module owns.
@@ -93,13 +107,25 @@ func legacyRoot() string { return filepath.Join(filepath.Dir(DataRoot()), legacy
 // MigrateLegacy adopts a RimForge data directory as the RimWorld game root.
 //
 // RimForge kept `profiles/`, `registry.json`, `settings.json` and `cache/`
-// directly under `<data>/rimforge`; Muster keeps exactly that layout under
-// `<data>/muster/rimworld`, so the migration is one directory rename. It runs
-// only when the data root does not exist yet and the legacy directory looks
-// like ours (it holds a registry, a settings file or a profiles directory).
+// directly under its root; Muster keeps exactly that layout under
+// `<root>/rimworld`. Two cases, both plain same-filesystem renames:
+//
+//   - Default locations: `<data>/rimforge` exists, `<data>/muster` does not,
+//     and the legacy directory looks like ours (it holds a registry, a
+//     settings file or a profiles directory) ⇒ rename it to
+//     `<data>/muster/rimworld`.
+//   - RIMFORGE_DATA_DIR set (and MUSTER_DATA_DIR not): that directory *is*
+//     the data root, so it is migrated in place — its RimForge entries move
+//     into a new `rimworld/` subdirectory. Data the user deliberately
+//     relocated stays where they put it.
+//
 // Any other state — both present, neither present, an unrecognised legacy
-// directory — is left alone. Returns whether a migration happened.
+// directory, an in-place root that already has `rimworld/` — is left alone.
+// Returns whether a migration happened.
 func MigrateLegacy() (bool, error) {
+	if rootFromLegacyEnv() {
+		return migrateInPlace(DataRoot())
+	}
 	root := DataRoot()
 	if _, err := os.Stat(root); err == nil {
 		return false, nil
@@ -118,6 +144,34 @@ func MigrateLegacy() (bool, error) {
 		// Leave no half-made root behind: a later run should retry cleanly.
 		_ = os.Remove(root)
 		return false, fmt.Errorf("could not move %s to %s: %w", legacy, dst, err)
+	}
+	return true, nil
+}
+
+// migrateInPlace moves a RimForge layout at root into root/rimworld.
+func migrateInPlace(root string) (bool, error) {
+	if !looksLikeRimForge(root) {
+		return false, nil
+	}
+	dst := filepath.Join(root, string(RimWorld))
+	if _, err := os.Stat(dst); err == nil {
+		// Already migrated (or a mixed state we must not guess about).
+		return false, nil
+	} else if !os.IsNotExist(err) {
+		return false, fmt.Errorf("could not stat %s: %w", dst, err)
+	}
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		return false, fmt.Errorf("could not read %s: %w", root, err)
+	}
+	if err := EnsureDir(dst); err != nil {
+		return false, err
+	}
+	for _, e := range entries {
+		from := filepath.Join(root, e.Name())
+		if err := os.Rename(from, filepath.Join(dst, e.Name())); err != nil {
+			return false, fmt.Errorf("could not move %s into %s: %w", from, dst, err)
+		}
 	}
 	return true, nil
 }
