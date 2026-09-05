@@ -260,11 +260,19 @@ func (s *Service) SyncPack(id string) (models.SyncReport, error) {
 		return out, fmt.Errorf("could not write the launcher profile: %w", err)
 	}
 	out.ProfileWritten = true
+	// The launcher reads its profiles on start, so one written while it is
+	// open only shows after a restart. Nothing is lost; the UI says so.
+	out.LauncherOpen = launcher.Running()
 	return out, nil
 }
 
 // OpenLauncher starts the official Minecraft launcher.
 func (s *Service) OpenLauncher() error { return launcher.Open() }
+
+// LauncherRunning reports whether the official launcher is already open.
+// Opening it again then does nothing, and a profile written since it started
+// is only picked up after it is closed and reopened.
+func (s *Service) LauncherRunning() (bool, error) { return launcher.Running(), nil }
 
 func manuals(in []packwiz.Manual) []models.Manual {
 	out := make([]models.Manual, 0, len(in))

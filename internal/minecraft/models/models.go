@@ -93,4 +93,7 @@ type SyncReport struct {
 	LoaderInstalled bool `json:"loaderInstalled"`
 	// VersionID is that installation's id.
 	VersionID string `json:"versionId"`
+	// LauncherOpen: the launcher was running when the profile was written, so
+	// it has to be closed and reopened before the pack shows up in it.
+	LauncherOpen bool `json:"launcherOpen"`
 }

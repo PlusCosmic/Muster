@@ -1,10 +1,11 @@
 <script lang="ts">
   import { app } from '$lib/rimworld/stores/app.svelte';
-  import { theme, THEMES } from '$lib/shell/stores/theme.svelte';
+  import { theme } from '$lib/shell/stores/theme.svelte';
   import { titlebar } from '$lib/shell/stores/titlebar.svelte';
   import { absoluteTime, relativeTime } from '$lib/shell/format';
   import { MOCK_ENABLED } from '$lib/shell/mock';
   import type { Settings } from '$lib/rimworld/types';
+  import AppearanceFields from '$lib/shell/components/AppearanceFields.svelte';
   import Icon from '$lib/shell/components/Icon.svelte';
   import Modal from '$lib/shell/components/Modal.svelte';
 
@@ -105,41 +106,12 @@
 <Modal title="Settings" subtitle="Path overrides and mod-sorting data" width={620} onclose={cancel}>
   <section class="group">
     <h3>Appearance</h3>
-    <div class="field theme-row">
-      <div>
-        <label class="label" for="rf-theme">Theme</label>
-        <p class="hint">
-          {THEMES.find((t) => t.id === draftTheme)?.description}
-          {#if draftTheme !== theme.current}— previewing; Save to keep it{/if}
-        </p>
-      </div>
-      <select
-        id="rf-theme"
-        class="input select"
-        value={draftTheme}
-        onchange={(e) => previewTheme(e.currentTarget.value)}
-      >
-        {#each THEMES as t (t.id)}
-          <option value={t.id}>{t.name}</option>
-        {/each}
-      </select>
-    </div>
-    <div class="field theme-row">
-      <div>
-        <label class="label" for="rf-titlebar">Window title bar</label>
-        <p class="hint">
-          Turn off if your window manager draws its own decorations — or none at all.
-          {#if draftTitlebar !== titlebar.current}— previewing; Save to keep it{/if}
-        </p>
-      </div>
-      <input
-        id="rf-titlebar"
-        type="checkbox"
-        class="check"
-        checked={draftTitlebar}
-        onchange={(e) => previewTitlebar(e.currentTarget.checked)}
-      />
-    </div>
+    <AppearanceFields
+      {draftTheme}
+      {draftTitlebar}
+      ontheme={previewTheme}
+      ontitlebar={previewTitlebar}
+    />
   </section>
 
   <section class="group">
@@ -274,39 +246,7 @@
     margin-top: 14px;
   }
 
-  .theme-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 16px;
-    margin-top: 10px;
-  }
-  .theme-row .hint {
-    margin-top: 2px;
-  }
-  .select {
-    width: 180px;
-    flex: none;
-    cursor: pointer;
-    /* native select needs an explicit bg/appearance to match .input */
-    -webkit-appearance: none;
-    appearance: none;
-    padding-right: 28px;
-    background-image: linear-gradient(45deg, transparent 50%, var(--text-muted) 50%),
-      linear-gradient(135deg, var(--text-muted) 50%, transparent 50%);
-    background-position: calc(100% - 16px) 55%, calc(100% - 11px) 55%;
-    background-size: 5px 5px;
-    background-repeat: no-repeat;
-  }
 
-  .check {
-    flex: none;
-    width: 16px;
-    height: 16px;
-    margin-right: 4px;
-    accent-color: var(--accent);
-    cursor: pointer;
-  }
 
   .input-row {
     display: flex;

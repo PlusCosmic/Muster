@@ -148,6 +148,7 @@ Each game's `frontend/src/lib/<game>/types.ts` narrows the generated
 | `CheckPack` | `id` | `PackCheck` | loads the pack, plans a sync, reports counts; writes nothing |
 | `SyncPack` | `id` | `SyncReport` | download/delete to match the pack, install the loader if the launcher lacks it, then write the launcher profile; emits `minecraft:sync` (`SyncProgress`) per file and per loader step |
 | `OpenLauncher` | — | — | start the official launcher |
+| `LauncherRunning` | — | `bool` | is it already open (a profile written since only shows after a restart) |
 
 ## Shared types
 
@@ -188,7 +189,7 @@ PackCheck       { id, latestVersion, minecraft, loader, loaderVersion, versionId
 SyncProgress    { id, phase: "files"|"loader"|"profile", done, total, current }   (event payload)
 Manual          { path, name, url, why }
 SyncReport      { id, version, downloaded: string[], deleted: string[], manual: Manual[],
-                  profileWritten, loaderInstalled, versionId }
+                  profileWritten, loaderInstalled, versionId, launcherOpen }
 ```
 
 ## RimWorld module
@@ -366,8 +367,12 @@ into `java/jre-21/`.
 (`neoforge-<v>`, `fabric-loader-<v>-<mc>`, `<mc>-forge-<v>`), `javaArgs`
 from the manifest's memory and args, and `lastUsed = now` so the launcher
 preselects it. Writes are read-merge-write over raw JSON: every other profile
-and top-level key is preserved byte for byte. The launcher must be closed
-while we write, since it saves the file on exit.
+and top-level key is preserved byte for byte. The launcher only reads this
+file on start (verified on the Store build: a profile added while it was open
+showed after a relaunch, nothing lost), so `SyncReport.launcherOpen` and
+`LauncherRunning` report when `launcher.Running()` sees a launcher process
+(`Minecraft.exe` / `MinecraftLauncher.exe` on Windows, `minecraft-launcher`
+/ `Minecraft` elsewhere) and the UI tells the user to close and reopen it.
 
 `PackCheck.loaderInstalled` reports whether `.minecraft/versions/<versionId>/`
 already exists, i.e. whether a sync would need to install it.
