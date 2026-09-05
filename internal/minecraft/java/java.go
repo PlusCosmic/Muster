@@ -80,20 +80,27 @@ func RuntimeRoots(minecraftDir string) []string {
 
 // FromLauncher looks for the launcher's bundled runtimes in RuntimeRoots:
 // `<root>/<component>/<platform>/<component>/bin/java`, plus macOS's
-// `…/jre.bundle/Contents/Home/bin/java`. Newest component first.
-func FromLauncher(minecraftDir string) (Runtime, bool) {
+// `…/jre.bundle/Contents/Home/bin/java`. Newest component first, and only one
+// that is actually new enough: the launcher also keeps jre-legacy (Java 8)
+// around for old versions of the game.
+func FromLauncher(ctx context.Context, minecraftDir string) (Runtime, bool) {
 	for _, root := range RuntimeRoots(minecraftDir) {
-		if rt, ok := fromRuntimeRoot(root); ok {
-			return rt, true
+		for _, candidate := range candidatesIn(root) {
+			if major, err := Major(ctx, candidate); err == nil && major >= MinMajor {
+				return Runtime{Path: candidate, Source: "launcher"}, true
+			}
 		}
 	}
 	return Runtime{}, false
 }
 
-func fromRuntimeRoot(root string) (Runtime, bool) {
+// candidatesIn lists every java executable under a runtime root, newest
+// component first.
+func candidatesIn(root string) []string {
+	var out []string
 	components, err := os.ReadDir(root)
 	if err != nil {
-		return Runtime{}, false
+		return nil
 	}
 	names := make([]string, 0, len(components))
 	for _, c := range components {
@@ -123,12 +130,12 @@ func fromRuntimeRoot(root string) (Runtime, bool) {
 			} {
 				candidate := filepath.Join(root, comp, p.Name(), rel)
 				if isExecutable(candidate) {
-					return Runtime{Path: candidate, Source: "launcher"}, true
+					out = append(out, candidate)
 				}
 			}
 		}
 	}
-	return Runtime{}, false
+	return out
 }
 
 func isExecutable(p string) bool {
@@ -169,11 +176,18 @@ func FromPath(ctx context.Context) (Runtime, bool) {
 	return Runtime{Path: p, Source: "path"}, true
 }
 
-// FromDownloaded finds a runtime Provision put under javaRoot.
+// FromDownloaded finds a runtime Provision put under javaRoot. Temurin's
+// macOS archives are app bundles, so the executable sits under
+// Contents/Home there.
 func FromDownloaded(javaRoot string) (Runtime, bool) {
-	p := filepath.Join(javaRoot, fmt.Sprintf("jre-%d", ProvisionMajor), "bin", exeName())
-	if isExecutable(p) {
-		return Runtime{Path: p, Source: "downloaded"}, true
+	base := filepath.Join(javaRoot, fmt.Sprintf("jre-%d", ProvisionMajor))
+	for _, p := range []string{
+		filepath.Join(base, "bin", exeName()),
+		filepath.Join(base, "Contents", "Home", "bin", exeName()),
+	} {
+		if isExecutable(p) {
+			return Runtime{Path: p, Source: "downloaded"}, true
+		}
 	}
 	return Runtime{}, false
 }
@@ -355,7 +369,7 @@ func extractZip(data []byte, dest string) error {
 
 // Ensure returns a usable runtime, downloading one only as a last resort.
 func Ensure(ctx context.Context, client *http.Client, userAgent, minecraftDir, javaRoot string, progress func(string)) (Runtime, error) {
-	if rt, ok := FromLauncher(minecraftDir); ok {
+	if rt, ok := FromLauncher(ctx, minecraftDir); ok {
 		return rt, nil
 	}
 	if rt, ok := FromDownloaded(javaRoot); ok {

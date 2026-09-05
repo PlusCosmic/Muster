@@ -21,6 +21,9 @@ type Entry struct {
 	// CurseForge is set when the URL was derived from CurseForge ids rather
 	// than given by the pack; those downloads can legitimately be refused.
 	CurseForge bool
+	// PageURL is where a person can get the file by hand when the download is
+	// refused: the CurseForge project page. Empty for direct downloads.
+	PageURL string
 }
 
 // Resolved is a pack read to the bottom: every client-side file as an Entry.
@@ -87,6 +90,9 @@ func resolveMetafile(metaPath string, m Metafile) (Entry, error) {
 		}
 		e.URL = curseForgeURL(m.Update.CurseForge.FileID, m.Filename)
 		e.CurseForge = true
+		if m.Update.CurseForge.ProjectID != 0 {
+			e.PageURL = fmt.Sprintf("https://www.curseforge.com/projects/%d", m.Update.CurseForge.ProjectID)
+		}
 	default:
 		return Entry{}, fmt.Errorf("%s: no download url and unknown mode %q", metaPath, m.Download.Mode)
 	}

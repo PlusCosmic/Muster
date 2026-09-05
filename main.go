@@ -119,10 +119,11 @@ func main() {
 // setupUpdater wires the self-updater on platforms where nothing else
 // updates the app (Linux builds come from a package manager), and returns
 // the "Check for updates" action for the App service (nil when updates are
-// off). The Updater's own periodic loop opens the update window even when up
+// off): a synchronous check whose result and error reach the caller, with
+// the install itself running on in the background when there is one. The Updater's own periodic loop opens the update window even when up
 // to date, so the timer here runs a silent Check and only opens the window
 // when there is something to install.
-func setupUpdater(app *application.App) func() {
+func setupUpdater(app *application.App) func() (bool, error) {
 	if runtime.GOOS == "linux" || os.Getenv("MUSTER_NO_SELF_UPDATE") != "" {
 		return nil
 	}
@@ -162,5 +163,15 @@ func setupUpdater(app *application.App) func() {
 			}
 		}()
 	})
-	return func() { go install() }
+	return func() (bool, error) {
+		rel, err := app.Updater.Check(context.Background())
+		if err != nil {
+			return false, err
+		}
+		if rel == nil {
+			return false, nil
+		}
+		go install()
+		return true, nil
+	}
 }
