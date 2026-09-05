@@ -115,7 +115,7 @@ Each game's `frontend/src/lib/<game>/types.ts` narrows the generated
 |---|---|---|---|
 | `RevealPath` | `path` | — | show in system file manager (`Env.OpenFileManager`) |
 | `GetAppInfo` | — | `AppInfo` | `{ version, dataRoot, selfUpdates }` |
-| `CheckForUpdates` | — | — | open the update window and install a newer release if there is one; no-op unless `selfUpdates` |
+| `CheckForUpdates` | — | `bool` | is a newer release available; when it is, the update window opens and installs it; a failed check is an error; always false unless `selfUpdates` |
 
 ### RimWorld service (`internal/rimworld/service.go`)
 
@@ -326,12 +326,23 @@ pattern `edge.forgecdn.net/files/<id/1000>/<id%1000>/<filename>`; a
 CurseForge file the CDN refuses (403/404) is reported in `SyncReport.manual`
 rather than failing the sync. Every download is hash-verified before it lands.
 
+`Load` also refuses a pack whose entries would collide (two metafiles
+installing the same filename), name `muster-pack.json`, or escape the install
+directory (index path and entries alike), and one with no
+`[versions] minecraft`.
+
 `MakePlan` diffs the resolved pack against `packs/<id>/muster-pack.json`, which
-records the path and hash of every file the last sync wrote: missing or
-changed ⇒ download; recorded but no longer in the pack ⇒ delete; anything the
-user added themselves is never touched. `preserve = true` files are not
-overwritten once installed. Optional files follow their pack default. `Apply`
-writes the state after every file, so an interrupted sync resumes exactly.
+records the path, hash and size of every file the last sync wrote: missing,
+changed, or no longer matching (a size mismatch, or a hash mismatch when the
+recorded stamp predates sizes) ⇒ download; recorded but no longer in the pack
+⇒ delete; anything the user added themselves is never touched. The size
+check is the compromise that keeps the on-open check fast; a corruption that
+preserves the size is not caught. `preserve = true` files are not overwritten
+once installed. Optional files follow their pack default. `Apply` streams
+each download through the hash into a temp file beside its target and writes
+the state after every file, so an interrupted sync resumes exactly. A
+CurseForge refusal is reported with the project page URL, not the failed CDN
+link.
 
 ### Loader install
 
@@ -348,27 +359,37 @@ when it already does:
   and run `java -jar <installer> --install-client <.minecraft>` (verified on
   neoforge-21.1.248: headless, downloads vanilla itself, ~9 s). The installer
   needs `launcher_profiles.json` to exist (created if not) and injects a
-  "NeoForge" profile, which is removed again so friends' dropdowns show only
-  packs. Logs land in `work/`.
+  "NeoForge" profile, which is removed again — per profiles file, comparing
+  each file's keys before and after — so friends' dropdowns show only packs.
+  Logs land in `work/`. A Fabric/Quilt profile JSON must carry the expected
+  `id`; an id-less document is refused rather than installed.
 
 Java for the installer (`java.Ensure`), in order: the launcher's own bundled
 runtime — `<.minecraft>/runtime/<component>/<platform>/<component>/bin/java`
 for the standalone launcher, and on Windows the Store launcher's package cache
 `%LOCALAPPDATA%\Packages\Microsoft.4297127D64EC6_8wekyb3d8bbwe\LocalCache\Local\runtime`
 (verified on Store build 2.6.2); components are ranked alpha < beta < gamma <
-delta < epsilon…, newest first — then a JRE we downloaded before, then a
-`java` on PATH that is 17+, and last a Temurin 21 JRE from the Adoptium API
-into `java/jre-21/`.
+delta < epsilon…, newest first, and each candidate must answer `-version`
+with 17+ (the launcher also keeps jre-legacy, Java 8) — then a JRE we
+downloaded before (`jre-21/bin/java`, or `jre-21/Contents/Home/bin/java` for
+Temurin's macOS bundles), then a `java` on PATH that is 17+, and last a
+Temurin 21 JRE from the Adoptium API into `java/jre-21/`.
 
 ### Launcher profile
 
 `SyncPack` then upserts `profiles["muster-<id>"]` in
 `.minecraft/launcher_profiles.json` (and the Store variant when present) with
 `gameDir = packs/<id>`, `lastVersionId` = the loader's installation id
-(`neoforge-<v>`, `fabric-loader-<v>-<mc>`, `<mc>-forge-<v>`), `javaArgs`
-from the manifest's memory and args, and `lastUsed = now` so the launcher
-preselects it. Writes are read-merge-write over raw JSON: every other profile
-and top-level key is preserved byte for byte. The launcher only reads this
+(`neoforge-<v>`, `fabric-loader-<v>-<mc>`, `<mc>-forge-<v>`; validated before
+any file moves), `javaArgs` from the manifest's memory and args (the launcher
+splits that string on whitespace with no quoting, so the manifest rejects
+args containing whitespace), and `lastUsed = now` so the launcher preselects
+it. Writes are read-merge-write over raw JSON: every other profile and
+top-level key is preserved byte for byte, and on our own profile only the
+fields Muster owns are written, so a resolution or javaDir the user set in
+the launcher survives a sync. On Linux the Flatpak launcher's
+`~/.var/app/com.mojang.Minecraft/.minecraft` is used when it, rather than
+`~/.minecraft`, is the one that has run. The launcher only reads this
 file on start (verified on the Store build: a profile added while it was open
 showed after a relaunch, nothing lost), so `SyncReport.launcherOpen` and
 `LauncherRunning` report when `launcher.Running()` sees a launcher process

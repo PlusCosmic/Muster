@@ -315,6 +315,9 @@ project-id = 1
 	if len(rep.Downloaded) != 1 || len(rep.Manual) != 1 || rep.Manual[0].Path != "mods/cf.jar" {
 		t.Fatalf("%+v", rep)
 	}
+	if rep.Manual[0].URL != "https://www.curseforge.com/projects/1" {
+		t.Fatalf("manual link should be the project page, got %s", rep.Manual[0].URL)
+	}
 	// Not recorded as installed, so the next plan asks for it again.
 	state, _ = LoadState(dir)
 	if plan := MakePlan(res, dir, state, nil); len(plan.Download) != 1 || plan.Download[0].Path != "mods/cf.jar" {
@@ -344,9 +347,91 @@ func TestOptionalFilesFollowDefaultUnlessExcluded(t *testing.T) {
 }
 
 func TestParseIndexRefusesEscapingPaths(t *testing.T) {
-	for _, bad := range []string{"../x", "/etc/passwd", `a\b`} {
+	for _, bad := range []string{"../x", "/etc/passwd", `a\b`, "a//b", "./x", "a/../b"} {
 		if _, err := ParseIndex([]byte(fmt.Sprintf("[[files]]\nfile = %q\nhash = \"00\"\n", bad))); err == nil {
 			t.Fatalf("%q should be refused", bad)
 		}
+	}
+}
+
+func TestParsePackRefusesEscapingIndexAndMissingVersion(t *testing.T) {
+	base := "[index]\nfile = %q\nhash-format = \"sha256\"\nhash = \"00\"\n\n[versions]\nminecraft = \"1.21.1\"\n"
+	if _, err := ParsePack([]byte(fmt.Sprintf(base, "../../../home/user/index.toml"))); err == nil {
+		t.Fatal("escaping index path should be refused")
+	}
+	if _, err := ParsePack([]byte(fmt.Sprintf(base, "index.toml"))); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ParsePack([]byte("[index]\nfile = \"index.toml\"\nhash-format = \"sha256\"\nhash = \"00\"\n")); err == nil {
+		t.Fatal("pack without versions.minecraft should be refused")
+	}
+}
+
+func TestLoadRefusesDuplicateDestinationsAndReservedNames(t *testing.T) {
+	fp := newFakePack(t)
+	fp.metafile("alpha", "both", []byte("A"), "")
+	// A second metafile installing the same jar name.
+	fp.files["mods/alpha-copy.pw.toml"] = fp.files["mods/alpha.pw.toml"]
+	fp.finish("1.0.0", "")
+	if _, err := (&Client{}).Load(context.Background(), fp.packURL()); err == nil || !strings.Contains(err.Error(), "both install") {
+		t.Fatalf("expected duplicate error, got %v", err)
+	}
+
+	fp = newFakePack(t)
+	fp.files[StateFile] = []byte("{}")
+	fp.finish("1.0.0", "")
+	if _, err := (&Client{}).Load(context.Background(), fp.packURL()); err == nil || !strings.Contains(err.Error(), "reserved") {
+		t.Fatalf("expected reserved-name error, got %v", err)
+	}
+}
+
+func TestPlanRedownloadsCorruptedFilesAndUpgradesOldStamps(t *testing.T) {
+	fp := newFakePack(t)
+	fp.metafile("alpha", "both", []byte("ALPHA"), "")
+	fp.finish("1.0.0", "")
+	c := &Client{}
+	dir := t.TempDir()
+	res, _ := c.Load(context.Background(), fp.packURL())
+	state, _ := LoadState(dir)
+	if _, err := c.Apply(context.Background(), res, dir, MakePlan(res, dir, state, nil), fp.packURL(), nil); err != nil {
+		t.Fatal(err)
+	}
+	state, _ = LoadState(dir)
+	if !strings.HasSuffix(state.Files["mods/alpha.jar"], ":5") {
+		t.Fatalf("stamp should record the size: %s", state.Files["mods/alpha.jar"])
+	}
+
+	// Same size, different bytes: caught only by hashing, which the size check
+	// skips — documented trade-off. A different size is caught.
+	if err := os.WriteFile(filepath.Join(dir, "mods", "alpha.jar"), []byte("ALPHA-broken"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if plan := MakePlan(res, dir, state, nil); len(plan.Download) != 1 {
+		t.Fatalf("size change should schedule a redownload: %+v", plan)
+	}
+
+	// A pre-size stamp is verified by hash, and Apply records the size.
+	if err := os.WriteFile(filepath.Join(dir, "mods", "alpha.jar"), []byte("ALPHA"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	state.Files["mods/alpha.jar"] = "sha512:" + strings.Split(state.Files["mods/alpha.jar"], ":")[1]
+	plan := MakePlan(res, dir, state, nil)
+	if len(plan.Download) != 0 || plan.Keep != 1 || plan.Restamp["mods/alpha.jar"] != 5 {
+		t.Fatalf("%+v", plan)
+	}
+	if err := saveState(dir, state); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.Apply(context.Background(), res, dir, plan, fp.packURL(), nil); err != nil {
+		t.Fatal(err)
+	}
+	state, _ = LoadState(dir)
+	if !strings.HasSuffix(state.Files["mods/alpha.jar"], ":5") {
+		t.Fatalf("restamp should add the size: %s", state.Files["mods/alpha.jar"])
+	}
+	// And a stale pre-size stamp for bytes that no longer match is redownloaded.
+	state.Files["mods/alpha.jar"] = "sha512:0000"
+	if plan := MakePlan(res, dir, state, nil); len(plan.Download) != 1 {
+		t.Fatalf("%+v", plan)
 	}
 }

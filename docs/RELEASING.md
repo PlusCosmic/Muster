@@ -1,8 +1,13 @@
 # Releasing
 
-Muster has one release channel: an Arch package published to a private pacman
-repository on Backblaze B2. There is no in-app updater, no local promotion
-script, and no timer — a machine changes only when `pacman -Syu` runs.
+Muster has two release channels, both driven by merges to `main`:
+
+- **Arch**: a package published to a private pacman repository on Backblaze
+  B2. No in-app updater there — a machine changes only when `pacman -Syu`
+  runs.
+- **Windows**: a GitHub release per version (see "Windows" below) with an
+  installer and a signed update manifest; installed copies update themselves
+  from it.
 
 ## How it works
 

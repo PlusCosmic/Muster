@@ -28,6 +28,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"strings"
 	"time"
 )
 
@@ -79,6 +80,14 @@ func Parse(data []byte) (Manifest, error) {
 		}
 		if p.Java.MaxMemoryMb != 0 && p.Java.MinMemoryMb > p.Java.MaxMemoryMb {
 			return Manifest{}, fmt.Errorf("manifest: pack %q has minMemoryMb > maxMemoryMb", p.ID)
+		}
+		for _, a := range p.Java.Args {
+			// The launcher stores JVM options as one space-separated string and
+			// splits it on whitespace with no quoting, so an argument containing
+			// whitespace cannot be represented; refuse rather than mangle it.
+			if a == "" || strings.ContainsAny(a, " \t\n") {
+				return Manifest{}, fmt.Errorf("manifest: pack %q has a java arg with whitespace: %q", p.ID, a)
+			}
 		}
 		if p.Java.Args == nil {
 			m.Packs[i].Java.Args = []string{}

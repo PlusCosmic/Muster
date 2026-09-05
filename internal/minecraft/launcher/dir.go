@@ -7,24 +7,43 @@ import (
 )
 
 // DefaultDir is where the official launcher keeps `.minecraft` on this OS, or
-// "" if the home directory is unknown. It may not exist yet.
+// "" if the home directory is unknown. It may not exist yet. On Linux the
+// Flatpak launcher (com.mojang.Minecraft) keeps its own under
+// ~/.var/app/…/.minecraft; that wins when it is the one that has actually run.
 func DefaultDir() string {
+	candidates := candidateDirs()
+	if len(candidates) == 0 {
+		return ""
+	}
+	for _, c := range candidates {
+		if Installed(c) {
+			return c
+		}
+	}
+	return candidates[0]
+}
+
+func candidateDirs() []string {
 	switch runtime.GOOS {
 	case "windows":
 		if v := os.Getenv("APPDATA"); v != "" {
-			return filepath.Join(v, ".minecraft")
+			return []string{filepath.Join(v, ".minecraft")}
 		}
-		return ""
+		return nil
 	case "darwin":
 		if home, err := os.UserHomeDir(); err == nil {
-			return filepath.Join(home, "Library", "Application Support", "minecraft")
+			return []string{filepath.Join(home, "Library", "Application Support", "minecraft")}
 		}
-		return ""
+		return nil
 	default:
-		if home, err := os.UserHomeDir(); err == nil {
-			return filepath.Join(home, ".minecraft")
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return nil
 		}
-		return ""
+		return []string{
+			filepath.Join(home, ".minecraft"),
+			filepath.Join(home, ".var", "app", "com.mojang.Minecraft", ".minecraft"),
+		}
 	}
 }
 
