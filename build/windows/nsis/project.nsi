@@ -33,6 +33,7 @@ Unicode true
 ####
 ## Include the wails tools
 ####
+!include "LogicLib.nsh"
 !include "wails_tools.nsh"
 
 # The version information for this two must consist of 4 parts
