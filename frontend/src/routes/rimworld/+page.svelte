@@ -33,18 +33,13 @@
       settingsOpen = true;
     }
   }
-
-  // Warn on close-with-unsaved-changes where the webview supports it.
-  function onbeforeunload(e: BeforeUnloadEvent) {
-    if (app.dirty) e.preventDefault();
-  }
 </script>
 
 <svelte:head>
   <title>Muster · RimWorld</title>
 </svelte:head>
 
-<svelte:window {onkeydown} {onbeforeunload} />
+<svelte:window {onkeydown} />
 
 <div class="shell" class:solo={!layout.sidebarVisible || layout.sidebarFloating}>
   {#if layout.sidebarVisible}
