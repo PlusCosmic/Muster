@@ -85,7 +85,7 @@ ShowInstDetails show # This will always show the installation details.
 # uninstall key and installed to a different directory, so without this an
 # upgrade would leave both apps installed and the old one able to recreate the
 # data directory Muster has just migrated. Run RimForge's own uninstaller
-# silently, from whichever scope it was installed in, before installing.
+# silently, from whichever scope it was installed in, as the first install step.
 !macro wails.removeLegacyProduct ROOT
     # The Wails installer writes its key in the 64-bit view (wails.writeUninstaller).
     SetRegView 64
@@ -105,12 +105,15 @@ ShowInstDetails show # This will always show the installation details.
 
 Function .onInit
    !insertmacro wails.checkArchitecture
-   !insertmacro wails.removeLegacyProduct HKCU
-   !insertmacro wails.removeLegacyProduct HKLM
 FunctionEnd
 
 Section
     !insertmacro wails.setShellContext
+
+    # Only once the user has committed to installing: cancelling from the
+    # welcome or directory page must leave RimForge as it was.
+    !insertmacro wails.removeLegacyProduct HKCU
+    !insertmacro wails.removeLegacyProduct HKLM
 
     !insertmacro wails.webview2runtime
 

@@ -75,15 +75,19 @@ suffixed `-2`, `-3`… A profile's identity is its slug (`id`).
 
 RimForge kept exactly the RimWorld layout above directly under
 `<data>/rimforge`. On startup, before anything reads the data root,
-`appdir.MigrateLegacy` renames `<data>/rimforge` to `<data>/muster/rimworld`
-when the Muster root does not exist yet and the RimForge directory holds a
-registry, a settings file or a `profiles/` directory. Any other state is left
-untouched (both present, neither present, unrecognised directory). Registry
-records hold slugs only, never absolute paths, so nothing inside needs
-rewriting. An installation that relocated its data with `RIMFORGE_DATA_DIR`
-keeps that directory as its root: its RimForge entries move into a new
-`rimworld/` subdirectory there instead. Frontend preferences (`rimforge-theme`, `-sidebar`, `-titlebar` in
-localStorage) are read as fallbacks for their `muster-*` keys.
+`appdir.MigrateLegacy` moves RimForge's four entries (`registry.json`,
+`profiles/`, `cache/`, `settings.json`) from `<data>/rimforge` into
+`<data>/muster/rimworld`, one rename each. Only those four: the RimForge
+directory also holds WebKitGTK's own storage, keyed by program name, which is
+left where it is. The move is resumable (the two entries that prove RimForge
+data, registry and profiles, go last) and refuses rather than guesses when an
+entry exists on both sides; a failure is shown in a native dialog and the app
+exits so nothing is written to a half-moved root. Registry records hold slugs
+only, never absolute paths, so nothing inside needs rewriting. An installation
+that relocated its data with `RIMFORGE_DATA_DIR` keeps that directory as its
+root: the same four entries move into a `rimworld/` subdirectory there.
+Frontend preferences (theme, sidebar, title bar) live in the webview's own
+storage, which also follows the program name, so they reset once.
 
 ## Command API (Wails services)
 
