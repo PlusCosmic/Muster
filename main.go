@@ -11,6 +11,7 @@ import (
 	"github.com/wailsapp/wails/v3/pkg/events"
 
 	"muster/internal/appdir"
+	"muster/internal/minecraft"
 	"muster/internal/rimworld"
 )
 
@@ -45,6 +46,7 @@ func main() {
 		log.Printf("muster: migrated RimForge data to %s", appdir.GameRoot(appdir.RimWorld))
 	}
 
+	mc := &minecraft.Service{}
 	app := application.New(application.Options{
 		Name:        "Muster",
 		Description: "Shared mod setups for RimWorld and Minecraft",
@@ -52,6 +54,7 @@ func main() {
 		Services: []application.Service{
 			application.NewService(&App{}),
 			application.NewService(&rimworld.Service{}),
+			application.NewService(mc),
 		},
 		Assets: application.AssetOptions{
 			Handler: application.AssetFileServerFS(assets),
@@ -63,6 +66,8 @@ func main() {
 			ProgramName: "muster",
 		},
 	})
+
+	mc.Emit = func(name string, data any) { app.Event.Emit(name, data) }
 
 	if migrateErr != nil {
 		app.Event.OnApplicationEvent(events.Common.ApplicationStarted, func(*application.ApplicationEvent) {
