@@ -29,7 +29,7 @@ Stack: Go + Wails 3 backend + Svelte 5 / TypeScript / SvelteKit static frontend
 The shell owns what every game needs and nothing game-specific:
 
 - **Backend**: `internal/appdir` (data root, per-game roots, legacy migration),
-  `internal/trash`, `internal/version`, `internal/xmldom` (generic XML tree),
+  `internal/settings` (the app's own settings.json), `internal/trash`, `internal/version`, `internal/xmldom` (generic XML tree),
   `internal/models` (game-neutral boundary types + the shared helpers
   `Str`/`Deref`/`Int64`/`NonNil`), and the `App` service in `app.go`.
 - **Frontend**: `frontend/src/lib/shell/` — the game rail, brand mark, modal,
@@ -45,8 +45,30 @@ what a "mod" or a "profile" is differs too much between RimWorld and Minecraft
 for a common abstraction to be more than a lowest common denominator.
 
 The frontend routes are `/rimworld` and `/minecraft`; `/` redirects to the
-last game used (localStorage `muster-game`). The rail
-(`lib/shell/components/GameRail.svelte`) is the only navigation between them.
+last game used (localStorage `muster-game`) among the games the user has
+switched on, or to `/welcome` while none is. The rail
+(`lib/shell/components/GameRail.svelte`) is the only navigation between them,
+and shows only the games that are on.
+
+### Welcome screen and the games list
+
+The shell does not assume which games a user cares about. The app's own
+`settings.json` (`internal/settings`, `AppSettings.games`) lists the modules
+that are on, in rail order; an empty list means first run. `+layout.ts` loads
+it before anything renders (the `modules` store,
+`lib/shell/stores/modules.svelte.ts`); the root route then goes to `/welcome`,
+which introduces the app, asks which games to show, and preselects the
+modules that already have data on disk (`AppInfo.gamesWithData`, so an
+upgrade from a build that showed every game never hides one in use). A
+relocated root (`RIMFORGE_DATA_DIR`) holds this file beside the game roots;
+the legacy migration tells it from a RimForge `settings.json` by its `games`
+key and leaves it alone. The rail
+is hidden until at least one game is on, and the layout loader guards the
+game routes: one whose game is off (or any, before the welcome screen)
+redirects, so Back and stale links cannot show a switched-off game. The button at the end of the rail
+opens the same picker as a dialog for adding or removing games later; turning
+off the game on screen moves to the first one still on. Data under a game
+root is never touched by turning its module off.
 
 ## Filesystem layout (app-owned data)
 
@@ -58,7 +80,7 @@ is unset, and the directory it names is migrated in place.
 
 ```
 <data>/muster/
-  settings.json               # common settings (none yet; reserved)
+  settings.json               # AppSettings: which game modules are on
   rimworld/                   # RimWorld game root (internal/rimworld/paths)
     profiles/<slug>/          # one savedatafolder per profile
       Config/ModsConfig.xml   # active mods (may not exist until first run/edit)
@@ -114,7 +136,9 @@ Each game's `frontend/src/lib/<game>/types.ts` narrows the generated
 | Method | Args | Returns | Notes |
 |---|---|---|---|
 | `RevealPath` | `path` | — | show in system file manager (`Env.OpenFileManager`) |
-| `GetAppInfo` | — | `AppInfo` | `{ version, dataRoot, selfUpdates }` |
+| `GetAppInfo` | — | `AppInfo` | `{ version, dataRoot, selfUpdates, gamesWithData }` |
+| `GetSettings` | — | `AppSettings` | which game modules are on; missing file ⇒ empty ⇒ first run; a file that cannot be read is an error |
+| `UpdateSettings` | `settings: AppSettings` | `AppSettings` | persists; unknown ids dropped, the rest echoed in rail order |
 | `CheckForUpdates` | — | `bool` | is a newer release available; when it is, the update window opens and installs it; a failed check is an error; always false unless `selfUpdates` |
 
 ### RimWorld service (`internal/rimworld/service.go`)
@@ -161,7 +185,8 @@ Each game's `frontend/src/lib/<game>/types.ts` narrows the generated
 App (`internal/models/models.go`):
 
 ```
-AppInfo         { version, dataRoot, selfUpdates }
+AppInfo         { version, dataRoot, selfUpdates, gamesWithData: string[] }
+AppSettings     { games: string[] }                          ("rimworld" | "minecraft", rail order)
 ```
 
 RimWorld (`internal/rimworld/models/models.go`):
