@@ -366,8 +366,13 @@ into `java/jre-21/`.
 (`neoforge-<v>`, `fabric-loader-<v>-<mc>`, `<mc>-forge-<v>`), `javaArgs`
 from the manifest's memory and args, and `lastUsed = now` so the launcher
 preselects it. Writes are read-merge-write over raw JSON: every other profile
-and top-level key is preserved byte for byte. The launcher must be closed
-while we write, since it saves the file on exit.
+and top-level key is preserved byte for byte. The launcher only reads this
+file on start and writes its in-memory copy back on exit (verified on the
+Store build: a profile added while it was open only showed after a
+relaunch), so `SyncPack` refuses up front with `ErrLauncherRunning` while
+`launcher.Running()` sees a launcher process (`Minecraft.exe` /
+`MinecraftLauncher.exe` on Windows, `minecraft-launcher` / `Minecraft`
+elsewhere).
 
 `PackCheck.loaderInstalled` reports whether `.minecraft/versions/<versionId>/`
 already exists, i.e. whether a sync would need to install it.

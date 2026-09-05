@@ -102,6 +102,10 @@ func (s *Service) Detect() (models.Detected, error) {
 	}, nil
 }
 
+// ErrLauncherRunning is returned by SyncPack while the official launcher is
+// open: it only reads its profiles on start and writes them back on exit.
+var ErrLauncherRunning = errors.New("the Minecraft launcher is open — close it, then try again")
+
 // ErrNoManifest is returned when no manifest URL is configured.
 var ErrNoManifest = errors.New("no pack list configured — set a manifest URL in Settings")
 
@@ -202,6 +206,11 @@ func (s *Service) SyncPack(id string) (models.SyncReport, error) {
 	p, err := s.findPack(ctx, id)
 	if err != nil {
 		return models.SyncReport{}, err
+	}
+	// The launcher would ignore or overwrite the profile we write at the end,
+	// so say so now rather than after a long download.
+	if launcher.Running() {
+		return models.SyncReport{}, ErrLauncherRunning
 	}
 	pw := s.packwiz()
 	res, err := pw.Load(ctx, p.PackURL)
