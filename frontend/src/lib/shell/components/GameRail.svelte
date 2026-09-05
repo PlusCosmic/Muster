@@ -1,13 +1,17 @@
 <script lang="ts">
   // The narrow strip down the left edge that switches between game modules.
   // Always docked, whatever the window width: each game's own sidebar handles
-  // its narrow-window behaviour to the right of this.
+  // its narrow-window behaviour to the right of this. Shows only the games
+  // the user has switched on; the button at the end of the list edits that.
   import { page } from '$app/state';
-  import { GAMES, rememberGame } from '../games';
+  import { rememberGame } from '../games';
+  import { modules } from '../stores/modules.svelte';
   import BrandMark from './BrandMark.svelte';
+  import GamesModal from './GamesModal.svelte';
   import Icon from './Icon.svelte';
 
-  const activeId = $derived(GAMES.find((g) => page.url.pathname.startsWith(g.path))?.id);
+  const activeId = $derived(modules.games.find((g) => page.url.pathname.startsWith(g.path))?.id);
+  let gamesOpen = $state(false);
 </script>
 
 <nav class="rail" aria-label="Games">
@@ -15,7 +19,7 @@
     <BrandMark size={30} />
   </div>
   <ul>
-    {#each GAMES as game (game.id)}
+    {#each modules.games as game (game.id)}
       <li>
         <a
           href={game.path}
@@ -29,8 +33,17 @@
         </a>
       </li>
     {/each}
+    <li class="manage">
+      <button type="button" title="Add or remove games" aria-label="Add or remove games" onclick={() => (gamesOpen = true)}>
+        <Icon name="plus" size={18} strokeWidth={1.8} />
+      </button>
+    </li>
   </ul>
 </nav>
+
+{#if gamesOpen}
+  <GamesModal onclose={() => (gamesOpen = false)} />
+{/if}
 
 <style>
   .rail {
@@ -61,21 +74,36 @@
     list-style: none;
   }
 
-  a {
+  .manage {
+    margin-top: 6px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+  }
+
+  a,
+  button {
     position: relative;
     display: grid;
     place-items: center;
     width: 38px;
     height: 38px;
+    padding: 0;
     color: var(--text-faint);
+    background: none;
+    border: none;
     border-radius: var(--r-md);
+    cursor: pointer;
     transition:
       background var(--t-fast),
       color var(--t-fast);
   }
-  a:hover {
+  a:hover,
+  button:hover {
     color: var(--text);
     background: var(--bg-hover);
+  }
+  button {
+    border: 1px dashed var(--border-strong);
   }
   a.active {
     color: var(--accent);
@@ -91,7 +119,8 @@
     border-radius: 0 3px 3px 0;
     background: var(--accent);
   }
-  a:focus-visible {
+  a:focus-visible,
+  button:focus-visible {
     outline: 2px solid var(--accent);
     outline-offset: 1px;
   }

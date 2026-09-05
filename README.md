@@ -12,6 +12,9 @@ with friends and keeping them in sync. One shell, one game module per game:
   and JVM args are the pack's recommendation, tuned per machine. One Install
   button per pack; the launcher then has it preselected.
 
+On first start Muster asks which games to show; the rail shows only those,
+and games can be added or removed later from the button at the end of it.
+
 Muster grew out of RimForge, its RimWorld-only predecessor, and adopts a
 RimForge data directory on first start.
 

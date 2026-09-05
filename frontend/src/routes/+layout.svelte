@@ -7,6 +7,7 @@
   import { theme } from '$lib/shell/stores/theme.svelte';
   import { titlebar } from '$lib/shell/stores/titlebar.svelte';
   import { anyUnsaved } from '$lib/shell/stores/unsaved.svelte';
+  import { modules } from '$lib/shell/stores/modules.svelte';
 
   let { children }: { children: Snippet } = $props();
 
@@ -23,8 +24,12 @@
 
 <svelte:window {onbeforeunload} />
 
-<div class="app">
-  <GameRail />
+<!-- No rail until the user has picked their games: the welcome screen owns
+     the whole window. -->
+<div class="app" class:norail={!modules.onboarded}>
+  {#if modules.onboarded}
+    <GameRail />
+  {/if}
   <div class="game">
     {@render children()}
   </div>
@@ -41,6 +46,10 @@
     height: 100vh;
     overflow: hidden;
     background: var(--bg-app);
+  }
+  .app.norail {
+    grid-template-areas: 'game';
+    grid-template-columns: minmax(0, 1fr);
   }
   .game {
     grid-area: game;

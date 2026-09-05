@@ -290,3 +290,27 @@ func TestMigrateLegacyNoopWhenNothingExists(t *testing.T) {
 		t.Fatalf("%v, %v", moved, err)
 	}
 }
+
+func TestGamesInUseListsNonEmptyRoots(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv(EnvDataDir, root)
+	if got := GamesInUse(); len(got) != 0 {
+		t.Fatalf("fresh root: got %v", got)
+	}
+	// An empty root does not count: nothing has been written there yet.
+	if err := os.MkdirAll(filepath.Join(root, "rimworld"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if got := GamesInUse(); len(got) != 0 {
+		t.Fatalf("empty rimworld root: got %v", got)
+	}
+	if err := os.MkdirAll(filepath.Join(root, "minecraft"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "minecraft", "settings.json"), []byte("{}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := GamesInUse(); len(got) != 1 || got[0] != Minecraft {
+		t.Fatalf("got %v, want [minecraft]", got)
+	}
+}
