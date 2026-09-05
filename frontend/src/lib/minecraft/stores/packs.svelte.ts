@@ -148,7 +148,7 @@ class PacksStore {
 
   /** First-run: save just the manifest URL and load. */
   async setManifestUrl(url: string): Promise<boolean> {
-    return this.updateSettings({ ...(this.settings ?? { manifestUrlOverride: null, minecraftDirOverride: null }), manifestUrlOverride: url });
+    return this.updateSettings({ ...(this.settings ?? { manifestUrl: null, minecraftDirOverride: null }), manifestUrl: url });
   }
 
   nameOf(id: string): string {

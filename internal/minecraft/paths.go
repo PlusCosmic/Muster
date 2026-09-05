@@ -18,12 +18,6 @@ import (
 	"muster/internal/appdir"
 )
 
-// DefaultManifestURL is the manifest offered when the user has not set one.
-// It is injected at build time (`-ldflags "-X muster/internal/minecraft.DefaultManifestURL=…"`)
-// because a private pack's manifest URL is its privacy layer and this
-// repository is public. Empty means "ask the user".
-var DefaultManifestURL string
-
 // Root is `<data>/muster/minecraft`.
 func Root() string { return appdir.GameRoot(appdir.Minecraft) }
 

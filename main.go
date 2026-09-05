@@ -116,13 +116,14 @@ func main() {
 	}
 }
 
-// setupUpdater wires the self-updater when this build knows where its
-// releases live, and returns the "Check for updates" action for the App
-// service (nil when updates are off). The Updater's own periodic loop opens
-// the update window even when up to date, so the timer here runs a silent
-// Check and only opens the window when there is something to install.
+// setupUpdater wires the self-updater on platforms where nothing else
+// updates the app (Linux builds come from a package manager), and returns
+// the "Check for updates" action for the App service (nil when updates are
+// off). The Updater's own periodic loop opens the update window even when up
+// to date, so the timer here runs a silent Check and only opens the window
+// when there is something to install.
 func setupUpdater(app *application.App) func() {
-	if version.UpdateManifestURL == "" {
+	if runtime.GOOS == "linux" || os.Getenv("MUSTER_NO_SELF_UPDATE") != "" {
 		return nil
 	}
 	provider, err := endpoint.New(endpoint.Config{URL: version.UpdateManifestURL, Channel: "stable"})
