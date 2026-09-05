@@ -11,7 +11,7 @@
 
   onMount(async () => {
     if (MOCK_ENABLED) {
-      info = { version: 'dev', dataRoot: '/home/you/.local/share/muster', selfUpdates: true };
+      info = { version: 'dev', dataRoot: '/home/you/.local/share/muster', selfUpdates: true, gamesWithData: [] };
       return;
     }
     try {

@@ -5,6 +5,7 @@ import (
 
 	"muster/internal/appdir"
 	"muster/internal/models"
+	"muster/internal/settings"
 	"muster/internal/version"
 )
 
@@ -24,10 +25,28 @@ func (a *App) RevealPath(path string) error {
 	return application.Get().Env.OpenFileManager(path, true)
 }
 
-// GetAppInfo reports the running version, where the app keeps its data, and
-// whether it can update itself.
+// GetAppInfo reports the running version, where the app keeps its data,
+// whether it can update itself, and which game modules already have data.
 func (a *App) GetAppInfo() (models.AppInfo, error) {
-	return models.AppInfo{Version: version.Version, DataRoot: appdir.DataRoot(), SelfUpdates: a.checkForUpdates != nil}, nil
+	games := []string{}
+	for _, g := range appdir.GamesInUse() {
+		games = append(games, string(g))
+	}
+	return models.AppInfo{
+		Version:       version.Version,
+		DataRoot:      appdir.DataRoot(),
+		SelfUpdates:   a.checkForUpdates != nil,
+		GamesWithData: games,
+	}, nil
+}
+
+// GetSettings reads the app's own settings: which game modules are on.
+func (a *App) GetSettings() (models.AppSettings, error) { return settings.Get() }
+
+// UpdateSettings persists the app's own settings and echoes back what was
+// stored (unknown game ids dropped, the rest in rail order).
+func (a *App) UpdateSettings(s models.AppSettings) (models.AppSettings, error) {
+	return settings.Update(s)
 }
 
 // CheckForUpdates looks for a newer release and reports whether one exists;
