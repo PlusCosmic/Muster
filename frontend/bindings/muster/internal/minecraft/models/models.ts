@@ -123,4 +123,10 @@ export interface SyncReport {
      * VersionID is that installation's id.
      */
     "versionId": string;
+
+    /**
+     * LauncherOpen: the launcher was running when the profile was written, so
+     * it has to be closed and reopened before the pack shows up in it.
+     */
+    "launcherOpen": boolean;
 }

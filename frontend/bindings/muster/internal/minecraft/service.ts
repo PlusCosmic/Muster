@@ -34,6 +34,15 @@ export function GetSettings(): $CancellablePromise<models$0.Settings> {
 }
 
 /**
+ * LauncherRunning reports whether the official launcher is already open.
+ * Opening it again then does nothing, and a profile written since it started
+ * is only picked up after it is closed and reopened.
+ */
+export function LauncherRunning(): $CancellablePromise<boolean> {
+    return $Call.ByID(991555629);
+}
+
+/**
  * ListPacks fetches the manifest and pairs each entry with its local state.
  */
 export function ListPacks(): $CancellablePromise<models$0.Pack[] | null> {

@@ -9,7 +9,8 @@ with friends and keeping them in sync. One shell, one game module per game:
 - **Minecraft** (in progress): pull a manifest of shared packwiz modpacks, sync
   the chosen one into its own directory, and register it as a profile in the
   official Minecraft launcher, installing the pack's mod loader into the
-  launcher on the way. Backend done; the UI is next.
+  launcher on the way. One Install button per pack; the launcher then has it
+  preselected.
 
 Muster grew out of RimForge, its RimWorld-only predecessor, and adopts a
 RimForge data directory on first start.
