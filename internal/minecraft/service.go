@@ -9,7 +9,9 @@ import (
 	"time"
 
 	"muster/internal/appdir"
+	"muster/internal/minecraft/java"
 	"muster/internal/minecraft/launcher"
+	"muster/internal/minecraft/loader"
 	"muster/internal/minecraft/manifest"
 	"muster/internal/minecraft/models"
 	"muster/internal/minecraft/packwiz"
@@ -29,6 +31,34 @@ type Service struct {
 	// nil drops events, which keeps this package free of Wails for tests and
 	// for cross-platform vetting.
 	Emit func(name string, data any)
+	// Installer installs loaders; nil means a default. Tests inject a fake Run.
+	Installer *loader.Installer
+	// findJava locates a Java for loader installers; nil means java.Ensure.
+	findJava func(ctx context.Context, minecraftDir string, progress func(string)) (string, error)
+}
+
+func (s *Service) installer() *loader.Installer {
+	if s.Installer != nil {
+		if s.Installer.HTTP == nil {
+			s.Installer.HTTP = s.client()
+		}
+		if s.Installer.UserAgent == "" {
+			s.Installer.UserAgent = userAgent()
+		}
+		return s.Installer
+	}
+	return &loader.Installer{HTTP: s.client(), UserAgent: userAgent()}
+}
+
+func (s *Service) javaFor(ctx context.Context, minecraftDir string, progress func(string)) (string, error) {
+	if s.findJava != nil {
+		return s.findJava(ctx, minecraftDir, progress)
+	}
+	rt, err := java.Ensure(ctx, s.client(), userAgent(), minecraftDir, JavaRoot(), progress)
+	if err != nil {
+		return "", fmt.Errorf("no Java to run the loader installer with: %w", err)
+	}
+	return rt.Path, nil
 }
 
 func (s *Service) client() *http.Client {
@@ -164,8 +194,9 @@ func (s *Service) CheckPack(id string) (models.PackCheck, error) {
 	}, nil
 }
 
-// SyncPack brings the pack's install directory up to date and writes (or
-// refreshes) its launcher profile. Progress goes out on SyncEvent.
+// SyncPack brings the pack's install directory up to date, makes sure the
+// launcher has the pack's loader, and writes (or refreshes) its launcher
+// profile. Progress goes out on SyncEvent in three phases.
 func (s *Service) SyncPack(id string) (models.SyncReport, error) {
 	ctx := context.Background()
 	p, err := s.findPack(ctx, id)
@@ -187,7 +218,7 @@ func (s *Service) SyncPack(id string) (models.SyncReport, error) {
 	}
 	plan := packwiz.MakePlan(res, dir, state, nil)
 	rep, err := pw.Apply(ctx, res, dir, plan, p.PackURL, func(done, total int, e packwiz.Entry) {
-		s.publish(SyncEvent, models.SyncProgress{ID: id, Done: done, Total: total, Current: e.Name})
+		s.publish(SyncEvent, models.SyncProgress{ID: id, Phase: "files", Done: done, Total: total, Current: e.Name})
 	})
 	out := models.SyncReport{
 		ID: id, Version: res.Pack.Version,
@@ -197,11 +228,6 @@ func (s *Service) SyncPack(id string) (models.SyncReport, error) {
 		return out, err
 	}
 
-	loader, loaderVersion := res.Pack.Loader()
-	versionID, err := launcher.VersionID(res.Pack.Versions["minecraft"], loader, loaderVersion)
-	if err != nil {
-		return out, err
-	}
 	mcDir := minecraftDir(loadSettings())
 	if mcDir == "" {
 		return out, errors.New("the Minecraft launcher's folder is unknown — set it in Settings")
@@ -209,6 +235,20 @@ func (s *Service) SyncPack(id string) (models.SyncReport, error) {
 	if err := appdir.EnsureDir(mcDir); err != nil {
 		return out, err
 	}
+
+	loaderName, loaderVersion := res.Pack.Loader()
+	step := func(msg string) {
+		s.publish(SyncEvent, models.SyncProgress{ID: id, Phase: "loader", Current: msg})
+	}
+	versionID, err := s.installer().Ensure(ctx, mcDir, res.Pack.Versions["minecraft"], loaderName, loaderVersion, WorkDir(),
+		func() (string, error) { return s.javaFor(ctx, mcDir, step) }, step)
+	if err != nil {
+		return out, fmt.Errorf("could not install %s: %w", loaderName, err)
+	}
+	out.VersionID = versionID
+	out.LoaderInstalled = true
+
+	s.publish(SyncEvent, models.SyncProgress{ID: id, Phase: "profile", Current: p.Name})
 	err = launcher.Upsert(mcDir, id, launcher.Profile{
 		Name:          p.Name,
 		Icon:          profileIcon(p),
@@ -220,7 +260,6 @@ func (s *Service) SyncPack(id string) (models.SyncReport, error) {
 		return out, fmt.Errorf("could not write the launcher profile: %w", err)
 	}
 	out.ProfileWritten = true
-	out.LoaderInstalled = launcher.HasVersion(mcDir, versionID)
 	return out, nil
 }
 

@@ -9,7 +9,11 @@ import (
 	"path/filepath"
 	"testing"
 
+	"context"
+	"errors"
+
 	"muster/internal/minecraft/launcher"
+	"muster/internal/minecraft/loader"
 	"muster/internal/minecraft/models"
 	"muster/internal/minecraft/packwiz"
 )
@@ -45,14 +49,34 @@ func TestServiceRoundTrip(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("MUSTER_DATA_DIR", root)
 	t.Setenv("RIMFORGE_DATA_DIR", "")
-	srv, _ := fakeServer(t)
+	srv, files := fakeServer(t)
 	mcDir := filepath.Join(root, "dot-minecraft")
-	var events []models.SyncProgress
-	svc := &Service{Emit: func(name string, data any) {
-		if name == SyncEvent {
-			events = append(events, data.(models.SyncProgress))
+	// A fake NeoForge installer: the jar is served by the fake server, the
+	// run creates the version like the real one does.
+	oldJar := loader.NeoForgeJar
+	loader.NeoForgeJar = srv.URL + "/installer/%s.jar"
+	t.Cleanup(func() { loader.NeoForgeJar = oldJar })
+	files["/installer/21.1.248.jar"] = []byte("jar")
+	var installerRuns int
+	fakeRun := func(ctx context.Context, javaPath, jar string, args []string, cwd, logPath string) error {
+		installerRuns++
+		if javaPath != "/fake/java" {
+			return errors.New("wrong java")
 		}
-	}}
+		vdir := filepath.Join(mcDir, "versions", "neoforge-21.1.248")
+		_ = os.MkdirAll(vdir, 0o755)
+		return os.WriteFile(filepath.Join(vdir, "neoforge-21.1.248.json"), []byte(`{}`), 0o644)
+	}
+	var events []models.SyncProgress
+	svc := &Service{
+		Emit: func(name string, data any) {
+			if name == SyncEvent {
+				events = append(events, data.(models.SyncProgress))
+			}
+		},
+		Installer: &loader.Installer{Run: fakeRun},
+		findJava:  func(context.Context, string, func(string)) (string, error) { return "/fake/java", nil },
+	}
 
 	// No manifest configured yet.
 	if _, err := svc.ListPacks(); err != ErrNoManifest {
@@ -78,11 +102,21 @@ func TestServiceRoundTrip(t *testing.T) {
 	}
 
 	rep, err := svc.SyncPack("test")
-	if err != nil || len(rep.Downloaded) != 1 || !rep.ProfileWritten || rep.LoaderInstalled || rep.Manual == nil || rep.Deleted == nil {
+	if err != nil || len(rep.Downloaded) != 1 || !rep.ProfileWritten || !rep.LoaderInstalled || rep.VersionID != "neoforge-21.1.248" || rep.Manual == nil || rep.Deleted == nil {
 		t.Fatalf("%+v %v", rep, err)
 	}
-	if len(events) != 1 || events[0].Current != "Alpha" || events[0].Total != 1 {
+	if installerRuns != 1 || !launcher.HasVersion(mcDir, "neoforge-21.1.248") {
+		t.Fatalf("installer runs %d", installerRuns)
+	}
+	var phases []string
+	for _, e := range events {
+		phases = append(phases, e.Phase)
+	}
+	if events[0].Phase != "files" || events[0].Current != "Alpha" || events[0].Total != 1 || phases[len(phases)-1] != "profile" {
 		t.Fatalf("events %+v", events)
+	}
+	if n := len(phases); n < 4 || phases[1] != "loader" {
+		t.Fatalf("expected loader steps between files and profile: %v", phases)
 	}
 	if _, err := os.Stat(filepath.Join(root, "minecraft", "packs", "test", "mods", "alpha.jar")); err != nil {
 		t.Fatal(err)
@@ -105,20 +139,14 @@ func TestServiceRoundTrip(t *testing.T) {
 		t.Fatalf("%+v", packs[0])
 	}
 	chk, _ = svc.CheckPack("test")
-	if !chk.UpToDate || chk.ToDownload != 0 {
+	if !chk.UpToDate || chk.ToDownload != 0 || !chk.LoaderInstalled {
 		t.Fatalf("%+v", chk)
 	}
 
-	// The loader installation appearing flips the flag.
-	vdir := filepath.Join(mcDir, "versions", "neoforge-21.1.248")
-	if err := os.MkdirAll(vdir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(vdir, "neoforge-21.1.248.json"), []byte("{}"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if chk, _ = svc.CheckPack("test"); !chk.LoaderInstalled {
-		t.Fatalf("%+v", chk)
+	// A second sync is idle: no downloads, installer not run again.
+	events = nil
+	if rep, err := svc.SyncPack("test"); err != nil || len(rep.Downloaded) != 0 || installerRuns != 1 || !rep.ProfileWritten {
+		t.Fatalf("%+v %v runs=%d", rep, err, installerRuns)
 	}
 
 	if _, err := svc.CheckPack("nope"); err == nil {

@@ -114,8 +114,13 @@ export interface SyncReport {
     "profileWritten": boolean;
 
     /**
-     * LoaderInstalled is false when the launcher still lacks the loader
-     * installation the profile points at; the pack cannot start until it has it.
+     * LoaderInstalled: the launcher has the loader installation the profile
+     * points at (installed during this sync if it was missing).
      */
     "loaderInstalled": boolean;
+
+    /**
+     * VersionID is that installation's id.
+     */
+    "versionId": string;
 }
