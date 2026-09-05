@@ -63,7 +63,9 @@ upgrade from a build that showed every game never hides one in use). A
 relocated root (`RIMFORGE_DATA_DIR`) holds this file beside the game roots;
 the legacy migration tells it from a RimForge `settings.json` by its `games`
 key and leaves it alone. The rail
-is hidden until at least one game is on. The button at the end of the rail
+is hidden until at least one game is on, and the layout loader guards the
+game routes: one whose game is off (or any, before the welcome screen)
+redirects, so Back and stale links cannot show a switched-off game. The button at the end of the rail
 opens the same picker as a dialog for adding or removing games later; turning
 off the game on screen moves to the first one still on. Data under a game
 root is never touched by turning its module off.
