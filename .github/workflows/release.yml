@@ -192,6 +192,9 @@ jobs:
         if: steps.version.outputs.publish == 'true'
         working-directory: build/windows/nsis
         run: |
+          # The script embeds Microsoft's WebView2 bootstrapper, which is not
+          # committed; the Wails package task fetches it the same way.
+          wails3 generate webview2bootstrapper -dir "$PWD"
           # Per-user: installs to %LOCALAPPDATA%\Programs\Muster with no UAC
           # prompt, where the updater can swap the exe without elevation.
           makensis -DWAILS_INSTALL_SCOPE=user -DREQUEST_EXECUTION_LEVEL=user \
