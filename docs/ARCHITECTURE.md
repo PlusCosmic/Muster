@@ -71,6 +71,8 @@ is unset, and the directory it names is migrated in place.
     settings.json             # manifest + .minecraft overrides
     packs/<id>/               # one install per pack = its launcher profile's gameDir
       muster-pack.json        # what the last sync put there (packwiz.StateFile)
+    java/jre-21/              # Temurin JRE, only when no usable Java was found
+    work/                     # loader installer downloads and logs
 ```
 
 Slugs are derived from the display name: lowercase, `[a-z0-9-]`, collisions
@@ -144,7 +146,7 @@ Each game's `frontend/src/lib/<game>/types.ts` narrows the generated
 | `Detect` | — | `Detected` | effective manifest URL, `.minecraft`, launcher presence |
 | `ListPacks` | — | `Pack[]` | manifest entries + local install state; network: manifest only |
 | `CheckPack` | `id` | `PackCheck` | loads the pack, plans a sync, reports counts; writes nothing |
-| `SyncPack` | `id` | `SyncReport` | download/delete to match the pack, then write the launcher profile; emits `minecraft:sync` (`SyncProgress`) per file |
+| `SyncPack` | `id` | `SyncReport` | download/delete to match the pack, install the loader if the launcher lacks it, then write the launcher profile; emits `minecraft:sync` (`SyncProgress`) per file and per loader step |
 | `OpenLauncher` | — | — | start the official launcher |
 
 ## Shared types
@@ -183,10 +185,10 @@ Pack            { id, name, description, icon?, packUrl, server?, minMemoryMb, m
                   profileWritten }
 PackCheck       { id, latestVersion, minecraft, loader, loaderVersion, versionId,
                   loaderInstalled, toDownload, toDelete, upToDate }
-SyncProgress    { id, done, total, current }                  (event payload)
+SyncProgress    { id, phase: "files"|"loader"|"profile", done, total, current }   (event payload)
 Manual          { path, name, url, why }
 SyncReport      { id, version, downloaded: string[], deleted: string[], manual: Manual[],
-                  profileWritten, loaderInstalled }
+                  profileWritten, loaderInstalled, versionId }
 ```
 
 ## RimWorld module
@@ -286,8 +288,9 @@ Input: the active id list. Output: sorted list + warnings. Pure — does not wri
 Go packages under `internal/minecraft/`: `manifest` (the pack list),
 `packwiz` (pack format, hashing, download resolution, sync planner/applier),
 `launcher` (`.minecraft` location, `launcher_profiles.json` merge-writes,
-opening the launcher), `models`, and the service, settings and layout in the
-package root.
+opening the launcher), `loader` (installing a loader into the launcher),
+`java` (a runtime to run loader installers with), `models`, and the service,
+settings and layout in the package root.
 
 ### Manifest
 
@@ -328,6 +331,33 @@ user added themselves is never touched. `preserve = true` files are not
 overwritten once installed. Optional files follow their pack default. `Apply`
 writes the state after every file, so an interrupted sync resumes exactly.
 
+### Loader install
+
+Between files and profile, `SyncPack` makes sure `.minecraft/versions/<id>/`
+exists for the pack's loader (`loader.Installer.Ensure`), and does nothing
+when it already does:
+
+- **Fabric / Quilt**: fetch the launcher profile JSON from
+  `meta.fabricmc.net` / `meta.quiltmc.org`
+  (`/versions/loader/<mc>/<loader>/profile/json`) and write it as
+  `versions/<id>/<id>.json`. The launcher fetches vanilla and the libraries
+  on first play. No Java needed.
+- **NeoForge / Forge**: download the installer jar from the loader's Maven
+  and run `java -jar <installer> --install-client <.minecraft>` (verified on
+  neoforge-21.1.248: headless, downloads vanilla itself, ~9 s). The installer
+  needs `launcher_profiles.json` to exist (created if not) and injects a
+  "NeoForge" profile, which is removed again so friends' dropdowns show only
+  packs. Logs land in `work/`.
+
+Java for the installer (`java.Ensure`), in order: the launcher's own bundled
+runtime — `<.minecraft>/runtime/<component>/<platform>/<component>/bin/java`
+for the standalone launcher, and on Windows the Store launcher's package cache
+`%LOCALAPPDATA%\Packages\Microsoft.4297127D64EC6_8wekyb3d8bbwe\LocalCache\Local\runtime`
+(verified on Store build 2.6.2); components are ranked alpha < beta < gamma <
+delta < epsilon…, newest first — then a JRE we downloaded before, then a
+`java` on PATH that is 17+, and last a Temurin 21 JRE from the Adoptium API
+into `java/jre-21/`.
+
 ### Launcher profile
 
 `SyncPack` then upserts `profiles["muster-<id>"]` in
@@ -339,9 +369,8 @@ preselects it. Writes are read-merge-write over raw JSON: every other profile
 and top-level key is preserved byte for byte. The launcher must be closed
 while we write, since it saves the file on exit.
 
-`PackCheck.loaderInstalled` / `SyncReport.loaderInstalled` report whether
-`.minecraft/versions/<lastVersionId>/` exists. Installing the loader is not
-built yet; until it is, a pack whose loader the launcher lacks cannot start.
+`PackCheck.loaderInstalled` reports whether `.minecraft/versions/<versionId>/`
+already exists, i.e. whether a sync would need to install it.
 
 ## Module ownership (work streams — disjoint, do not edit outside your scope)
 
@@ -357,8 +386,8 @@ built yet; until it is, a pack whose loader the launcher lacks cannot start.
 - **RimWorld backend**: `internal/rimworld/{paths,settings,profiles,launch,mods}`.
 - **RimWorld frontend**: `frontend/src/lib/rimworld/` (except `types.ts`,
   `api.ts`) and `frontend/src/routes/rimworld/`.
-- **Minecraft backend**: `internal/minecraft/{manifest,packwiz,launcher}` and
-  the non-service files in `internal/minecraft/`.
+- **Minecraft backend**: `internal/minecraft/{manifest,packwiz,launcher,loader,java}`
+  and the non-service files in `internal/minecraft/`.
 - **Minecraft frontend**: `frontend/src/lib/minecraft/` (except `types.ts`,
   `api.ts`) and `frontend/src/routes/minecraft/`.
 

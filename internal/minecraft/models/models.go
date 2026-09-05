@@ -62,8 +62,11 @@ type PackCheck struct {
 }
 
 // SyncProgress is emitted as the `minecraft:sync` event during SyncPack.
+// Phase is "files" (Done/Total count downloads), "loader" (Current is a
+// step description; Done/Total are 0), or "profile".
 type SyncProgress struct {
 	ID      string `json:"id"`
+	Phase   string `json:"phase"`
 	Done    int    `json:"done"`
 	Total   int    `json:"total"`
 	Current string `json:"current"`
@@ -85,7 +88,9 @@ type SyncReport struct {
 	Deleted        []string `json:"deleted"`
 	Manual         []Manual `json:"manual"`
 	ProfileWritten bool     `json:"profileWritten"`
-	// LoaderInstalled is false when the launcher still lacks the loader
-	// installation the profile points at; the pack cannot start until it has it.
+	// LoaderInstalled: the launcher has the loader installation the profile
+	// points at (installed during this sync if it was missing).
 	LoaderInstalled bool `json:"loaderInstalled"`
+	// VersionID is that installation's id.
+	VersionID string `json:"versionId"`
 }

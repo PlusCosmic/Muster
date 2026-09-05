@@ -161,8 +161,14 @@ func Upsert(dir, packID string, profile Profile) error {
 }
 
 // Remove deletes our profile for packID from every profiles file in dir.
-func Remove(dir, packID string) error {
-	key := ProfileKey(packID)
+func Remove(dir, packID string) error { return RemoveKeys(dir, []string{ProfileKey(packID)}) }
+
+// RemoveKeys deletes the given profile keys (any owner) from every profiles
+// file in dir. Used to undo the entries loader installers inject.
+func RemoveKeys(dir string, keys []string) error {
+	if len(keys) == 0 {
+		return nil
+	}
 	for _, name := range profilesFiles(dir) {
 		path := filepath.Join(dir, name)
 		if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
@@ -172,10 +178,16 @@ func Remove(dir, packID string) error {
 		if err != nil {
 			return err
 		}
-		if _, ok := d.profiles[key]; !ok {
+		changed := false
+		for _, key := range keys {
+			if _, ok := d.profiles[key]; ok {
+				delete(d.profiles, key)
+				changed = true
+			}
+		}
+		if !changed {
 			continue
 		}
-		delete(d.profiles, key)
 		if err := d.write(path); err != nil {
 			return fmt.Errorf("write %s: %w", name, err)
 		}

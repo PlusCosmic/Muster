@@ -48,8 +48,9 @@ export function OpenLauncher(): $CancellablePromise<void> {
 }
 
 /**
- * SyncPack brings the pack's install directory up to date and writes (or
- * refreshes) its launcher profile. Progress goes out on SyncEvent.
+ * SyncPack brings the pack's install directory up to date, makes sure the
+ * launcher has the pack's loader, and writes (or refreshes) its launcher
+ * profile. Progress goes out on SyncEvent in three phases.
  */
 export function SyncPack(id: string): $CancellablePromise<models$0.SyncReport> {
     return $Call.ByID(1529887180, id);
