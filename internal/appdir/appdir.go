@@ -108,53 +108,37 @@ func legacyRoot() string { return filepath.Join(filepath.Dir(DataRoot()), legacy
 //
 // RimForge kept `profiles/`, `registry.json`, `settings.json` and `cache/`
 // directly under its root; Muster keeps exactly that layout under
-// `<root>/rimworld`. Two cases, both plain same-filesystem renames:
+// `<root>/rimworld`. Only those four entries move — RimForge's root also holds
+// WebKitGTK's own storage (`storage/`, `hsts-storage.sqlite`, …), which is
+// keyed by program name and is not ours to relocate, and a user's custom root
+// may hold anything. Two sources, same procedure:
 //
-//   - Default locations: `<data>/rimforge` exists, `<data>/muster` does not,
-//     and the legacy directory looks like ours (it holds a registry, a
-//     settings file or a profiles directory) ⇒ rename it to
-//     `<data>/muster/rimworld`.
+//   - Default locations: `<data>/rimforge` ⇒ `<data>/muster/rimworld`.
 //   - RIMFORGE_DATA_DIR set (and MUSTER_DATA_DIR not): that directory *is*
-//     the data root, so it is migrated in place — RimForge's own entries
-//     (and only those) move into a `rimworld/` subdirectory. Data the user
-//     deliberately relocated stays where they put it, and anything else they
-//     keep in that directory is not touched. The move is per entry and
-//     resumable: a run that fails half-way is finished by the next one.
+//     the data root, so its entries move into `<root>/rimworld` in place.
+//     Data the user deliberately relocated stays where they put it.
 //
-// Any other state — both present, neither present, an unrecognised legacy
-// directory — is left alone. Returns whether anything was moved.
+// Each entry is one same-filesystem rename, and the move is resumable: the two
+// entries that count as evidence of RimForge data (registry, profiles) go
+// last, so a run that dies part-way always leaves one behind for the next run
+// to pick up. Once Muster has run (the destination exists) a lone
+// settings.json or cache/ is no longer taken as RimForge's, because Muster
+// keeps its own common settings.json at the root. An entry present on both
+// sides is an error rather than a guess. Returns whether anything was moved.
 func MigrateLegacy() (bool, error) {
+	src := legacyRoot()
 	if rootFromLegacyEnv() {
-		return migrateInPlace(DataRoot())
+		src = DataRoot()
 	}
-	root := DataRoot()
-	if _, err := os.Stat(root); err == nil {
-		return false, nil
-	} else if !os.IsNotExist(err) {
-		return false, fmt.Errorf("could not stat %s: %w", root, err)
-	}
-	legacy := legacyRoot()
-	if info, err := os.Stat(legacy); err != nil || !info.IsDir() || !looksLikeRimForge(legacy) {
-		return false, nil
-	}
-	if err := EnsureDir(root); err != nil {
-		return false, err
-	}
-	dst := GameRoot(RimWorld)
-	if err := os.Rename(legacy, dst); err != nil {
-		// Leave no half-made root behind: a later run should retry cleanly.
-		_ = os.Remove(root)
-		return false, fmt.Errorf("could not move %s to %s: %w", legacy, dst, err)
-	}
-	return true, nil
+	return migrateEntries(src, GameRoot(RimWorld))
 }
 
 // legacyEntries is everything RimForge ever wrote to its root, in the order
-// migrateInPlace moves them. The two that count as evidence of RimForge data
-// (see hasRimForgeData) go last, so that a run which dies part-way always
-// leaves at least one of them behind and the next run resumes; once they are
-// gone, everything before them is gone too.
+// they are moved; see MigrateLegacy for why the markers come last.
 var legacyEntries = []string{"settings.json", "cache", "registry.json", "profiles"}
+
+// legacyMarkers are the entries that always mean RimForge data.
+var legacyMarkers = []string{"registry.json", "profiles"}
 
 func anyExists(dir string, names []string) bool {
 	for _, name := range names {
@@ -165,27 +149,13 @@ func anyExists(dir string, names []string) bool {
 	return false
 }
 
-// hasRimForgeData reports whether dir holds RimForge's registry or profiles.
-// `settings.json` and `cache/` alone are not proof once Muster has run in a
-// directory, because Muster keeps its own common settings.json at the root.
-func hasRimForgeData(dir string) bool {
-	return anyExists(dir, []string{"registry.json", "profiles"})
-}
-
-// migrateInPlace moves RimForge's entries at root into root/rimworld, one
-// rename each. Entries already gone from the root are skipped, so a run that
-// stopped part-way resumes; an entry present on both sides is an error rather
-// than a guess.
-//
-// The gate: the registry or profiles at the root always mean RimForge data.
-// Before Muster has ever run here (no `rimworld/` yet), a settings file or
-// cache at the root is RimForge's too — an install that saved path overrides
-// but never made a profile — and is migrated as well.
-func migrateInPlace(root string) (bool, error) {
-	dst := filepath.Join(root, string(RimWorld))
+func migrateEntries(src, dst string) (bool, error) {
+	if info, err := os.Stat(src); err != nil || !info.IsDir() {
+		return false, nil
+	}
 	_, dstErr := os.Stat(dst)
 	neverRan := os.IsNotExist(dstErr)
-	if !hasRimForgeData(root) && !(neverRan && anyExists(root, legacyEntries)) {
+	if !anyExists(src, legacyMarkers) && !(neverRan && anyExists(src, legacyEntries)) {
 		return false, nil
 	}
 	if err := EnsureDir(dst); err != nil {
@@ -193,7 +163,7 @@ func migrateInPlace(root string) (bool, error) {
 	}
 	moved := false
 	for _, name := range legacyEntries {
-		from := filepath.Join(root, name)
+		from := filepath.Join(src, name)
 		if _, err := os.Lstat(from); err != nil {
 			if os.IsNotExist(err) {
 				continue
@@ -210,15 +180,6 @@ func migrateInPlace(root string) (bool, error) {
 		moved = true
 	}
 	return moved, nil
-}
-
-func looksLikeRimForge(dir string) bool {
-	for _, name := range []string{"registry.json", "settings.json", "profiles"} {
-		if _, err := os.Stat(filepath.Join(dir, name)); err == nil {
-			return true
-		}
-	}
-	return false
 }
 
 // EnsureDir creates path (and parents) if absent.

@@ -66,6 +66,8 @@ class AppStore {
   warnings = $state<SortWarning[]>([]);
 
   // --- flags --------------------------------------------------------------
+  /** init() has run. The route remounts on every visit; the draft must not reload. */
+  initialised = false;
   booting = $state(true);
   loadingProfiles = $state(false);
   loadingMods = $state(false);
@@ -106,6 +108,8 @@ class AppStore {
   // --- loading ------------------------------------------------------------
 
   async init() {
+    if (this.initialised) return;
+    this.initialised = true;
     this.booting = true;
     await Promise.all([
       this.loadSettings(),

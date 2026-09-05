@@ -197,18 +197,26 @@ func seedLegacy(t *testing.T, base string, files ...string) string {
 func TestMigrateLegacyAdoptsRimForgeDir(t *testing.T) {
 	base := t.TempDir()
 	t.Setenv(EnvDataDir, filepath.Join(base, "muster"))
-	legacy := seedLegacy(t, base, "registry.json", "settings.json", "profiles/vanilla/Config/ModsConfig.xml", "cache/communityRules.json")
+	t.Setenv(EnvLegacyDataDir, "")
+	legacy := seedLegacy(t, base, "registry.json", "settings.json", "profiles/vanilla/Config/ModsConfig.xml", "cache/communityRules.json",
+		// WebKitGTK's own data, which lives in the same directory and stays.
+		"storage/salt", "hsts-storage.sqlite")
 
 	moved, err := MigrateLegacy()
 	if err != nil || !moved {
 		t.Fatalf("MigrateLegacy: %v, %v", moved, err)
 	}
-	if _, err := os.Stat(legacy); !os.IsNotExist(err) {
-		t.Fatalf("legacy dir should be gone: %v", err)
-	}
 	for _, f := range []string{"registry.json", "settings.json", "profiles/vanilla/Config/ModsConfig.xml", "cache/communityRules.json"} {
 		if _, err := os.Stat(filepath.Join(GameRoot(RimWorld), f)); err != nil {
 			t.Fatalf("%s not migrated: %v", f, err)
+		}
+		if _, err := os.Stat(filepath.Join(legacy, f)); !os.IsNotExist(err) {
+			t.Fatalf("%s should have left the legacy dir: %v", f, err)
+		}
+	}
+	for _, f := range []string{"storage/salt", "hsts-storage.sqlite"} {
+		if _, err := os.Stat(filepath.Join(legacy, f)); err != nil {
+			t.Fatalf("%s is WebKit's, should stay: %v", f, err)
 		}
 	}
 	// Idempotent: a second run is a no-op.
@@ -217,25 +225,52 @@ func TestMigrateLegacyAdoptsRimForgeDir(t *testing.T) {
 	}
 }
 
-func TestMigrateLegacyLeavesExistingRootAlone(t *testing.T) {
+func TestMigrateLegacyResumesIntoExistingRoot(t *testing.T) {
 	base := t.TempDir()
 	root := filepath.Join(base, "muster")
 	t.Setenv(EnvDataDir, root)
-	legacy := seedLegacy(t, base, "registry.json")
-	if err := os.MkdirAll(root, 0o755); err != nil {
+	t.Setenv(EnvLegacyDataDir, "")
+	// A run that moved settings.json and died: the root exists, the markers
+	// are still in the legacy dir, so the next run finishes the job.
+	legacy := seedLegacy(t, base, "registry.json", "profiles/a/x")
+	if err := os.MkdirAll(filepath.Join(root, "rimworld"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "rimworld", "settings.json"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if moved, err := MigrateLegacy(); err != nil || !moved {
+		t.Fatalf("%v, %v", moved, err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "rimworld", "profiles", "a", "x")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(legacy, "registry.json")); !os.IsNotExist(err) {
+		t.Fatalf("registry should have moved: %v", err)
+	}
+}
+
+func TestMigrateLegacyLeavesSettingsOnlyLegacyDirOnceMusterRan(t *testing.T) {
+	base := t.TempDir()
+	root := filepath.Join(base, "muster")
+	t.Setenv(EnvDataDir, root)
+	t.Setenv(EnvLegacyDataDir, "")
+	legacy := seedLegacy(t, base, "settings.json")
+	if err := os.MkdirAll(filepath.Join(root, "rimworld"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	if moved, err := MigrateLegacy(); err != nil || moved {
 		t.Fatalf("should not touch anything: %v, %v", moved, err)
 	}
-	if _, err := os.Stat(legacy); err != nil {
-		t.Fatalf("legacy dir should still exist: %v", err)
+	if _, err := os.Stat(filepath.Join(legacy, "settings.json")); err != nil {
+		t.Fatal(err)
 	}
 }
 
 func TestMigrateLegacyIgnoresUnrecognisedDir(t *testing.T) {
 	base := t.TempDir()
 	t.Setenv(EnvDataDir, filepath.Join(base, "muster"))
+	t.Setenv(EnvLegacyDataDir, "")
 	legacy := seedLegacy(t, base, "unrelated.txt")
 	if moved, err := MigrateLegacy(); err != nil || moved {
 		t.Fatalf("should not adopt: %v, %v", moved, err)
@@ -250,6 +285,7 @@ func TestMigrateLegacyIgnoresUnrecognisedDir(t *testing.T) {
 
 func TestMigrateLegacyNoopWhenNothingExists(t *testing.T) {
 	t.Setenv(EnvDataDir, filepath.Join(t.TempDir(), "muster"))
+	t.Setenv(EnvLegacyDataDir, "")
 	if moved, err := MigrateLegacy(); err != nil || moved {
 		t.Fatalf("%v, %v", moved, err)
 	}

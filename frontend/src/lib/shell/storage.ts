@@ -1,13 +1,13 @@
-// localStorage helpers for per-machine UI preferences. Keys are prefixed
-// `muster-`; a `rimforge-` key from the app's RimWorld-only predecessor is
-// read as a fallback so an upgrade keeps the user's theme and layout.
+// localStorage helpers for per-machine UI preferences (theme, sidebar,
+// title bar). Keys are prefixed `muster-`. The webview keys its storage by
+// program name, so RimForge's `rimforge-*` values are in a store this app
+// cannot see; those three cosmetic preferences reset once on upgrade.
 const PREFIX = 'muster-';
-const LEGACY_PREFIX = 'rimforge-';
 
 export function readPref(key: string): string | null {
   if (typeof localStorage === 'undefined') return null;
   try {
-    return localStorage.getItem(PREFIX + key) ?? localStorage.getItem(LEGACY_PREFIX + key);
+    return localStorage.getItem(PREFIX + key);
   } catch {
     return null;
   }
