@@ -105,10 +105,12 @@ export const mockApi = {
       manual: id === 'cobblemon' ? [{ path: 'mods/mcw-windows.jar', name: "Macaw's Windows", url: 'https://www.curseforge.com/minecraft/mc-mods/macaws-windows', why: 'CurseForge refused the download (HTTP 403)' }] : [],
       profileWritten: true,
       loaderInstalled: true,
-      versionId: id === 'cobblemon' ? 'neoforge-21.1.248' : 'fabric-loader-0.16.9-1.21.1'
+      versionId: id === 'cobblemon' ? 'neoforge-21.1.248' : 'fabric-loader-0.16.9-1.21.1',
+      launcherOpen: id === 'cobblemon'
     };
   },
   openLauncher: async (): Promise<void> => {},
+  launcherRunning: async (): Promise<boolean> => false,
   onSyncProgress: (cb: (p: SyncProgress) => void): (() => void) => {
     listeners.add(cb);
     return () => listeners.delete(cb);

@@ -19,6 +19,7 @@ export const listPacks = wrap('listPacks');
 export const checkPack = wrap('checkPack');
 export const syncPack = wrap('syncPack');
 export const openLauncher = wrap('openLauncher');
+export const launcherRunning = wrap('launcherRunning');
 
 /** Subscription: the unsubscribe resolves once the implementation is loaded. */
 export function onSyncProgress(cb: (p: import('./types').SyncProgress) => void): () => void {

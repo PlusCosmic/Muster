@@ -14,6 +14,7 @@ export const listPacks = (): Promise<Pack[]> => Svc.ListPacks().then((p) => (p ?
 export const checkPack = (id: string): Promise<PackCheck> => Svc.CheckPack(id);
 export const syncPack = (id: string): Promise<SyncReport> => Svc.SyncPack(id) as Promise<SyncReport>;
 export const openLauncher = (): Promise<void> => Svc.OpenLauncher();
+export const launcherRunning = (): Promise<boolean> => Svc.LauncherRunning();
 
 /** Subscribe to sync progress. Returns an unsubscribe function. */
 export const onSyncProgress = (cb: (p: SyncProgress) => void): (() => void) =>

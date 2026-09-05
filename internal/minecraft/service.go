@@ -102,10 +102,6 @@ func (s *Service) Detect() (models.Detected, error) {
 	}, nil
 }
 
-// ErrLauncherRunning is returned by SyncPack while the official launcher is
-// open: it only reads its profiles on start and writes them back on exit.
-var ErrLauncherRunning = errors.New("the Minecraft launcher is open — close it, then try again")
-
 // ErrNoManifest is returned when no manifest URL is configured.
 var ErrNoManifest = errors.New("no pack list configured — set a manifest URL in Settings")
 
@@ -207,11 +203,6 @@ func (s *Service) SyncPack(id string) (models.SyncReport, error) {
 	if err != nil {
 		return models.SyncReport{}, err
 	}
-	// The launcher would ignore or overwrite the profile we write at the end,
-	// so say so now rather than after a long download.
-	if launcher.Running() {
-		return models.SyncReport{}, ErrLauncherRunning
-	}
 	pw := s.packwiz()
 	res, err := pw.Load(ctx, p.PackURL)
 	if err != nil {
@@ -269,11 +260,19 @@ func (s *Service) SyncPack(id string) (models.SyncReport, error) {
 		return out, fmt.Errorf("could not write the launcher profile: %w", err)
 	}
 	out.ProfileWritten = true
+	// The launcher reads its profiles on start, so one written while it is
+	// open only shows after a restart. Nothing is lost; the UI says so.
+	out.LauncherOpen = launcher.Running()
 	return out, nil
 }
 
 // OpenLauncher starts the official Minecraft launcher.
 func (s *Service) OpenLauncher() error { return launcher.Open() }
+
+// LauncherRunning reports whether the official launcher is already open.
+// Opening it again then does nothing, and a profile written since it started
+// is only picked up after it is closed and reopened.
+func (s *Service) LauncherRunning() (bool, error) { return launcher.Running(), nil }
 
 func manuals(in []packwiz.Manual) []models.Manual {
 	out := make([]models.Manual, 0, len(in))

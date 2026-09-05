@@ -7,12 +7,11 @@ import (
 	"time"
 )
 
-// Running reports whether the official launcher is open. It keeps its
-// installation list in memory while open and writes it back on exit, so a
-// profile added underneath it is ignored or overwritten (seen on the Windows
-// Store build: the new profile only appeared once the launcher had been
-// closed and reopened). Errors from the process listing count as "not
-// running": the check is advisory.
+// Running reports whether the official launcher is open. It reads its
+// installation list on start, so a profile added while it is open only shows
+// once it has been closed and reopened (seen on the Windows Store build;
+// nothing is lost, the file on disk is right). Errors from the process
+// listing count as "not running": the check is advisory.
 func Running() bool {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()

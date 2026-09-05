@@ -2,7 +2,7 @@
 // components render and dispatch.
 import * as backend from '../backend';
 import type { Detected, Pack, PackCheck, Settings, SyncProgress, SyncReport } from '../types';
-import { toastError, toastSuccess } from '$lib/shell/stores/toasts.svelte';
+import { toastError, toastInfo, toastSuccess } from '$lib/shell/stores/toasts.svelte';
 
 export const NO_MANIFEST = 'no pack list configured';
 
@@ -102,7 +102,10 @@ class PacksStore {
       await Promise.all([this.loadPacks(), this.check(id)]);
       const n = report.downloaded.length;
       const what = n === 0 ? 'Already up to date' : `${n} file${n === 1 ? '' : 's'} updated`;
-      toastSuccess(`${this.nameOf(id)} is ready`, `${what}. Open the Minecraft launcher and press Play.`);
+      const next = report.launcherOpen
+        ? 'The Minecraft launcher is open: close it and open it again, and the pack will be selected.'
+        : 'Open the Minecraft launcher and press Play.';
+      toastSuccess(`${this.nameOf(id)} is ready`, `${what}. ${next}`);
       return report;
     } catch (e) {
       toastError(`Could not install ${this.nameOf(id)}`, e);
@@ -116,6 +119,13 @@ class PacksStore {
 
   async openLauncher(): Promise<void> {
     try {
+      if (await backend.launcherRunning()) {
+        toastInfo(
+          'The Minecraft launcher is already open',
+          'Close it and click Open launcher again; it only picks up new packs when it starts.'
+        );
+        return;
+      }
       await backend.openLauncher();
     } catch (e) {
       toastError('Could not open the Minecraft launcher', e);
