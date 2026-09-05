@@ -6,9 +6,14 @@
  */
 export interface Detected {
     /**
-     * ManifestURL is the effective manifest URL, or nil when none is configured.
+     * ManifestURL is the configured manifest URL, or nil when none is.
      */
     "manifestUrl": string | null;
+
+    /**
+     * RegistryURL is the pack registry in use.
+     */
+    "registryUrl": string;
 
     /**
      * MinecraftDir is the effective `.minecraft` directory, or nil if unknown.
@@ -81,6 +86,16 @@ export interface Manual {
 export interface Pack {
     "id": string;
     "name": string;
+
+    /**
+     * Source is "code" (entered pack code) or "manifest" (from the pack list).
+     */
+    "source": string;
+
+    /**
+     * Code is the pack code this came from, when Source is "code".
+     */
+    "code": string | null;
     "description": string;
     "icon": string | null;
     "packUrl": string;
@@ -140,14 +155,40 @@ export interface PackCheck {
 }
 
 /**
+ * PackCode is one entered code and the registration it resolved to.
+ */
+export interface PackCode {
+    "code": string;
+    "addedAtMs": number;
+
+    /**
+     * Pack is the registration's pack entry as last seen, as JSON of the
+     * manifest entry shape. Kept opaque here so models stays free of the
+     * manifest package; the service decodes it.
+     */
+    "pack": string | null;
+}
+
+/**
  * Settings is the module's settings.json.
  */
 export interface Settings {
     /**
-     * ManifestURL is the pack list the user was given. Muster ships with none:
-     * the app knows nothing about any particular pack.
+     * Codes are the pack codes the user has entered, with what each resolved
+     * to last time, so the pack list works when the registry is unreachable.
+     */
+    "codes": PackCode[] | null;
+
+    /**
+     * ManifestURL is an optional pack list (a manifest) the user was given.
+     * Muster ships with none: the app knows nothing about any particular pack.
      */
     "manifestUrl": string | null;
+
+    /**
+     * RegistryURLOverride replaces the public pack registry (self-hosters).
+     */
+    "registryUrlOverride": string | null;
 
     /**
      * MinecraftDirOverride replaces the detected `.minecraft` directory.

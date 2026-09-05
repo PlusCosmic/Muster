@@ -145,7 +145,9 @@ Each game's `frontend/src/lib/<game>/types.ts` narrows the generated
 | `GetSettings` | — | `Settings` | |
 | `UpdateSettings` | `settings: Settings` | `Settings` | persists overrides |
 | `Detect` | — | `Detected` | effective manifest URL, `.minecraft`, launcher presence |
-| `ListPacks` | — | `Pack[]` | manifest entries + local install state; network: manifest only |
+| `ListPacks` | — | `Pack[]` | every pack from the user's codes (re-resolved, cached copy if the registry is down) and pack list, + local install state |
+| `AddPackCode` | `input` | `Pack` | normalise a typed code / pasted link, resolve it against the registry, remember it |
+| `RemovePackCode` | `code` | — | forget a code; files and launcher profile stay |
 | `CheckPack` | `id` | `PackCheck` | loads the pack, plans a sync, reports counts; writes nothing |
 | `SyncPack` | `id` | `SyncReport` | download/delete to match the pack, install the loader if the launcher lacks it, then write the launcher profile; emits `minecraft:sync` (`SyncProgress`) per file and per loader step |
 | `GetLaunchSettings` | `id` | `LaunchSettings` | what the pack launches with on this machine |
@@ -183,10 +185,12 @@ RulesDbStatus   { cached: bool, fetchedAtMs?, ruleCount }
 Minecraft (`internal/minecraft/models/models.go`):
 
 ```
-Settings        { manifestUrl?, minecraftDirOverride?, packs: { [id]: LaunchSettings } }
+Settings        { codes: PackCode[], manifestUrl?, registryUrlOverride?, minecraftDirOverride?,
+                  packs: { [id]: LaunchSettings } }
+PackCode        { code, addedAtMs, pack: <manifest entry JSON, as last resolved> }
 LaunchSettings  { maxMemoryMb, minMemoryMb?, args: string[], followRecommendedArgs }
-Detected        { manifestUrl?, minecraftDir?, launcherInstalled, packsDir, totalMemoryMb, maxHeapMb }
-Pack            { id, name, description, icon?, packUrl, server?,
+Detected        { manifestUrl?, registryUrl, minecraftDir?, launcherInstalled, packsDir, totalMemoryMb, maxHeapMb }
+Pack            { id, name, source: "code"|"manifest", code?, description, icon?, packUrl, server?,
                   recommendedMinMemoryMb, recommendedMaxMemoryMb, recommendedArgs: string[],
                   launch: LaunchSettings, launchCustomised,
                   installDir, installed, installedVersion?, syncedAtMs?, profileWritten }
@@ -292,16 +296,39 @@ Input: the active id list. Output: sorted list + warnings. Pure — does not wri
 
 ## Minecraft module
 
-Go packages under `internal/minecraft/`: `manifest` (the pack list),
+Go packages under `internal/minecraft/`: `registry` (pack codes),
+`manifest` (the pack list),
 `packwiz` (pack format, hashing, download resolution, sync planner/applier),
 `launcher` (`.minecraft` location, `launcher_profiles.json` merge-writes,
 opening the launcher), `loader` (installing a loader into the launcher),
 `java` (a runtime to run loader installers with), `models`, and the service,
 settings and layout in the package root.
 
+### Pack codes
+
+The main way a pack reaches a user. A pack author registers a pack with the
+Muster pack registry (`api.musterlauncher.com`, `registry.DefaultURL`; a
+self-hosted one goes in `Settings.registryUrlOverride`) and gets a code such
+as `amber-otter-42`. `AddPackCode` accepts the code in any case or spacing, a
+`muster://add/<code>` deep link, or a registry page URL ending in
+`/p/<code>`; it calls `GET /v1/packs/{code}`, which returns
+
+```jsonc
+{ "code": "…", "pack": { …a manifest entry… }, "createdAt": "…", "updatedAt": "…",
+  "resolved": { "version", "minecraft", "loader", "loaderVersion", "checkedAt" } }
+```
+
+or `404 {"error":{"code":"not_found","message":…}}`. The pack entry is
+validated exactly like a manifest entry and stored with the code in
+`settings.json`, so the pack stays listed and installable when the registry
+is unreachable; `ListPacks` re-resolves every code (8 s budget, in parallel)
+and refreshes the stored copies. Codes come first in the list; a manifest
+pack with the same id is hidden. Removing a code only delists the pack.
+
 ### Manifest
 
-One JSON document at a URL the pack author controls:
+The other way in: one JSON document at a URL the pack author controls, for
+groups that host their own list. Same entry shape as a registration's `pack`:
 
 ```jsonc
 { "packs": [ {

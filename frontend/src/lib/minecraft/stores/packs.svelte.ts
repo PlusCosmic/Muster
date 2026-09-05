@@ -4,7 +4,7 @@ import * as backend from '../backend';
 import type { Detected, LaunchSettings, Pack, PackCheck, Settings, SyncProgress, SyncReport } from '../types';
 import { toastError, toastInfo, toastSuccess } from '$lib/shell/stores/toasts.svelte';
 
-export const NO_MANIFEST = 'no pack list configured';
+export const NO_PACKS = 'no packs yet';
 
 class PacksStore {
   packs = $state<Pack[]>([]);
@@ -21,7 +21,7 @@ class PacksStore {
 
   booting = $state(true);
   loadingPacks = $state(false);
-  /** Set when listing failed because no manifest URL is configured. */
+  /** Set when there is nothing to list: no codes and no pack list URL. */
   needsManifest = $state(false);
   /** Set when listing failed for another reason (network, bad manifest). */
   listError = $state<string | null>(null);
@@ -65,7 +65,7 @@ class PacksStore {
       this.listError = null;
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      if (msg.includes(NO_MANIFEST)) {
+      if (msg.includes(NO_PACKS)) {
         this.needsManifest = true;
         this.listError = null;
       } else {
@@ -175,9 +175,39 @@ class PacksStore {
     this.packs = this.packs.map((p) => (p.id === id ? { ...p, launch, launchCustomised: customised } : p));
   }
 
+  /** Resolve a pack code against the registry and add the pack. */
+  async addCode(input: string): Promise<Pack | null> {
+    try {
+      const p = await backend.addPackCode(input);
+      await this.loadPacks();
+      void this.check(p.id);
+      toastSuccess(`Added ${p.name}`, 'Set the memory you want to give it, then Install.');
+      return p;
+    } catch (e) {
+      toastError('Could not add that pack', e);
+      return null;
+    }
+  }
+
+  /** Forget a code. Files and the launcher profile stay where they are. */
+  async removeCode(code: string): Promise<boolean> {
+    try {
+      await backend.removePackCode(code);
+      await this.loadPacks();
+      toastSuccess('Pack removed', 'Its files and launcher profile were left in place.');
+      return true;
+    } catch (e) {
+      toastError('Could not remove the pack', e);
+      return false;
+    }
+  }
+
   /** First-run: save just the manifest URL and load. */
   async setManifestUrl(url: string): Promise<boolean> {
-    return this.updateSettings({ ...(this.settings ?? { manifestUrl: null, minecraftDirOverride: null, packs: {} }), manifestUrl: url });
+    return this.updateSettings({
+      ...(this.settings ?? { codes: [], manifestUrl: null, registryUrlOverride: null, minecraftDirOverride: null, packs: {} }),
+      manifestUrl: url
+    });
   }
 
   nameOf(id: string): string {

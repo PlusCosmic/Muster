@@ -11,7 +11,7 @@
 
   let { onclose }: { onclose: () => void } = $props();
 
-  const blank: Settings = { manifestUrl: null, minecraftDirOverride: null, packs: {} };
+  const blank: Settings = { codes: [], manifestUrl: null, registryUrlOverride: null, minecraftDirOverride: null, packs: {} };
   let draft = $state<Settings>({ ...(packs.settings ?? blank) });
   let draftTheme = $state(theme.current);
   let draftTitlebar = $state(titlebar.current);
@@ -62,11 +62,31 @@
   </section>
 
   <section class="group">
-    <h3>Pack list</h3>
+    <h3>Pack sources</h3>
     <p class="group-note">
-      The address of the pack list you were given by whoever runs your packs. Muster has no packs of
-      its own; this list is where they come from.
+      Packs normally arrive as codes: add one from the main screen. A pack list URL is the older
+      way in and still works alongside them.
     </p>
+    <div class="field">
+      <label class="label" for="mc-registry">Pack registry</label>
+      <div class="input-row">
+        <input
+          id="mc-registry"
+          class="input mono"
+          spellcheck="false"
+          autocomplete="off"
+          placeholder={d?.registryUrl ?? 'https://api.musterlauncher.com'}
+          value={draft.registryUrlOverride ?? ''}
+          oninput={(e) => setValue('registryUrlOverride', e.currentTarget.value)}
+        />
+        {#if draft.registryUrlOverride}
+          <button class="btn btn-sm" title="Clear" onclick={() => setValue('registryUrlOverride', '')}>
+            <Icon name="x" size={13} />
+          </button>
+        {/if}
+      </div>
+      <p class="hint">Where pack codes are looked up. Only change this if you run your own registry.</p>
+    </div>
     <div class="field">
       <label class="label" for="mc-manifest">Pack list URL</label>
       <div class="input-row">
