@@ -42,7 +42,8 @@
     if (!ok) return;
     const next = lastGame(modules.games);
     rememberGame(next.id);
-    await goto(next.path);
+    // Replace: Back from the first game should not reopen the welcome screen.
+    await goto(next.path, { replaceState: true });
   }
 </script>
 

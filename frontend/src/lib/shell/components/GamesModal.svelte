@@ -21,12 +21,13 @@
     saving = false;
     if (!ok) return;
     onclose();
-    // The game on screen may just have been switched off.
+    // The game on screen may just have been switched off. Replace the
+    // history entry: Back must not lead to a game that is off.
     const here = GAMES.find((g) => page.url.pathname.startsWith(g.path));
     if (here && !modules.enabled.includes(here.id)) {
       const next = lastGame(modules.games);
       rememberGame(next.id);
-      await goto(next.path);
+      await goto(next.path, { replaceState: true });
     }
   }
 </script>
