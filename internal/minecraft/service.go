@@ -92,13 +92,14 @@ func (s *Service) UpdateSettings(v models.Settings) (models.Settings, error) {
 	return v, nil
 }
 
-// Detect reports the effective manifest URL, launcher location and memory.
+// Detect reports the configured sources, launcher location and memory.
 func (s *Service) Detect() (models.Detected, error) {
 	st := loadSettings()
 	dir := minecraftDir(st)
 	total := s.totalMemory()
 	return models.Detected{
 		ManifestURL:       core.Str(manifestURL(st)),
+		RegistryURL:       registryURL(st),
 		MinecraftDir:      core.Str(dir),
 		LauncherInstalled: launcher.Installed(dir),
 		PacksDir:          PacksRoot(),
@@ -124,28 +125,23 @@ func (s *Service) launchFor(p manifest.Pack, st models.Settings) (models.LaunchS
 	return effectiveLaunch(p.Recommended, sp, machine.MaxHeapMb(s.totalMemory())), ok
 }
 
-// ErrNoManifest is returned when no manifest URL is configured.
-var ErrNoManifest = errors.New("no pack list configured — set a manifest URL in Settings")
-
-func (s *Service) fetchManifest(ctx context.Context) (manifest.Manifest, error) {
-	url := manifestURL(loadSettings())
-	if url == "" {
-		return manifest.Manifest{}, ErrNoManifest
-	}
-	return manifest.Fetch(ctx, s.client(), userAgent(), url)
-}
-
-// ListPacks fetches the manifest and pairs each entry with its local state.
+// ListPacks lists every pack from the user's codes and pack list, each paired
+// with its local state.
 func (s *Service) ListPacks() ([]models.Pack, error) {
-	m, err := s.fetchManifest(context.Background())
+	srcs, err := s.sources(context.Background())
 	if err != nil {
 		return nil, err
 	}
 	st := loadSettings()
 	dir := minecraftDir(st)
-	out := make([]models.Pack, 0, len(m.Packs))
-	for _, p := range m.Packs {
-		out = append(out, s.describe(p, dir, st))
+	out := make([]models.Pack, 0, len(srcs))
+	for _, src := range srcs {
+		p := s.describe(src.pack, dir, st)
+		p.Source = src.kind
+		if src.code != "" {
+			p.Code = core.Str(src.code)
+		}
+		out = append(out, p)
 	}
 	return out, nil
 }
@@ -176,16 +172,16 @@ func (s *Service) describe(p manifest.Pack, minecraftDir string, st models.Setti
 }
 
 func (s *Service) findPack(ctx context.Context, id string) (manifest.Pack, error) {
-	m, err := s.fetchManifest(ctx)
+	srcs, err := s.sources(ctx)
 	if err != nil {
 		return manifest.Pack{}, err
 	}
-	for _, p := range m.Packs {
-		if p.ID == id {
-			return p, nil
+	for _, src := range srcs {
+		if src.pack.ID == id {
+			return src.pack, nil
 		}
 	}
-	return manifest.Pack{}, fmt.Errorf("pack %q is not in the manifest", id)
+	return manifest.Pack{}, fmt.Errorf("pack %q is not in your packs", id)
 }
 
 // CheckPack loads the pack and reports what a sync would do, without doing it.

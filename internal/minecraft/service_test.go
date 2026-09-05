@@ -80,9 +80,9 @@ func TestServiceRoundTrip(t *testing.T) {
 		TotalMemoryMb: func() int { return 16384 }, // ⇒ MaxHeapMb 12288
 	}
 
-	// No manifest configured yet.
-	if _, err := svc.ListPacks(); err != ErrNoManifest {
-		t.Fatalf("expected ErrNoManifest, got %v", err)
+	// Nothing configured yet.
+	if _, err := svc.ListPacks(); err != ErrNoPacks {
+		t.Fatalf("expected ErrNoPacks, got %v", err)
 	}
 	m := srv.URL + "/m.json"
 	if _, err := svc.UpdateSettings(models.Settings{ManifestURL: &m, MinecraftDirOverride: &mcDir}); err != nil {
@@ -223,5 +223,92 @@ func TestEffectiveLaunch(t *testing.T) {
 	saved = models.LaunchSettings{MaxMemoryMb: 8192, MinMemoryMb: &min, Args: []string{"-Xss1M"}}
 	if l = effectiveLaunch(rec, &saved, 0); *l.MinMemoryMb != 8192 || l.Args[0] != "-Xss1M" {
 		t.Fatalf("%+v", l)
+	}
+}
+
+func TestPackCodes(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("MUSTER_DATA_DIR", root)
+	t.Setenv("RIMFORGE_DATA_DIR", "")
+	packSrv, _ := fakeServer(t)
+	var regDown bool
+	reg := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if regDown {
+			w.WriteHeader(503)
+			return
+		}
+		switch r.URL.Path {
+		case "/v1/packs/plum-weasel-23":
+			fmt.Fprintf(w, `{"code":"plum-weasel-23","pack":{"id":"frontier","name":"Frontier","pack":%q,"recommended":{"maxMemoryMb":6144,"args":["-XX:+UseZGC"]},"server":"play.example.com"}}`, packSrv.URL+"/pack/pack.toml")
+		default:
+			w.WriteHeader(404)
+			_, _ = w.Write([]byte(`{"error":{"code":"not_found","message":"no pack registered with that code"}}`))
+		}
+	}))
+	defer reg.Close()
+	mcDir := filepath.Join(root, "dot-minecraft")
+	svc := &Service{TotalMemoryMb: func() int { return 16384 }}
+	regURL := reg.URL
+	if _, err := svc.UpdateSettings(models.Settings{RegistryURLOverride: &regURL, MinecraftDirOverride: &mcDir}); err != nil {
+		t.Fatal(err)
+	}
+	if det, _ := svc.Detect(); det.RegistryURL != reg.URL {
+		t.Fatalf("%+v", det)
+	}
+
+	if _, err := svc.AddPackCode("nobody-home-1"); err == nil {
+		t.Fatal("unknown code should fail")
+	}
+	if _, err := svc.AddPackCode("not a code!"); err == nil {
+		t.Fatal("garbage should fail before any network")
+	}
+	// A pasted deep link works, and the recommendation comes through to launch defaults.
+	p, err := svc.AddPackCode("muster://add/Plum-Weasel-23")
+	if err != nil || p.ID != "frontier" || p.Source != "code" || p.Code == nil || *p.Code != "plum-weasel-23" || p.Launch.MaxMemoryMb != 6144 {
+		t.Fatalf("%+v %v", p, err)
+	}
+	packs, err := svc.ListPacks()
+	if err != nil || len(packs) != 1 || packs[0].Source != "code" {
+		t.Fatalf("%+v %v", packs, err)
+	}
+	// Entering it again refreshes rather than duplicates.
+	if _, err := svc.AddPackCode("plum-weasel-23"); err != nil {
+		t.Fatal(err)
+	}
+	if st := loadSettings(); len(st.Codes) != 1 {
+		t.Fatalf("codes: %+v", st.Codes)
+	}
+	// Registry down: the cached registration keeps the pack listed and checkable.
+	regDown = true
+	packs, err = svc.ListPacks()
+	if err != nil || len(packs) != 1 || packs[0].Name != "Frontier" {
+		t.Fatalf("offline: %+v %v", packs, err)
+	}
+	if chk, err := svc.CheckPack("frontier"); err != nil || chk.LatestVersion != "2.0" {
+		t.Fatalf("offline check: %+v %v", chk, err)
+	}
+	regDown = false
+
+	// A manifest pack with the same id as a code's is hidden; a different one shows.
+	m := packSrv.URL + "/m.json"
+	st := loadSettings()
+	st.ManifestURL = &m
+	if _, err := svc.UpdateSettings(st); err != nil {
+		t.Fatal(err)
+	}
+	packs, _ = svc.ListPacks()
+	if len(packs) != 2 || packs[0].Source != "code" || packs[1].Source != "manifest" || packs[1].ID != "test" {
+		t.Fatalf("%+v", packs)
+	}
+
+	if err := svc.RemovePackCode("plum-weasel-23"); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.RemovePackCode("plum-weasel-23"); err == nil {
+		t.Fatal("second removal should fail")
+	}
+	packs, _ = svc.ListPacks()
+	if len(packs) != 1 || packs[0].Source != "manifest" {
+		t.Fatalf("%+v", packs)
 	}
 }

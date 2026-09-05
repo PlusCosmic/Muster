@@ -2,7 +2,7 @@
 import type { Detected, LaunchSettings, Pack, PackCheck, Settings, SyncProgress, SyncReport } from './types';
 
 const HOUR = 3_600_000;
-let settings: Settings = { manifestUrl: 'https://packs.example.com/manifest.json', minecraftDirOverride: null, packs: {} };
+let settings: Settings = { codes: [{ code: 'plum-weasel-23', addedAtMs: Date.now() - 3 * HOUR, pack: null }], manifestUrl: 'https://packs.example.com/manifest.json', registryUrlOverride: null, minecraftDirOverride: null, packs: {} };
 const TOTAL_MB = 16384;
 const MAX_HEAP = 12288;
 const recommended: Record<string, { min: number; max: number; args: string[] }> = {
@@ -29,7 +29,9 @@ const state: Record<string, { installed: boolean; version: string | null; synced
 const packs = (): Pack[] => [
   {
     id: 'frontier',
-    name: "Frontier",
+    name: 'Frontier',
+    source: 'code',
+    code: 'plum-weasel-23',
     description: 'A kitchen-sink NeoForge pack: tech, exploration and a shared server.',
     icon: null,
     packUrl: 'https://packs.example.com/pack.toml',
@@ -48,6 +50,8 @@ const packs = (): Pack[] => [
   {
     id: 'skyblock',
     name: 'Weekend Skyblock',
+    source: 'manifest',
+    code: null,
     description: 'A small Fabric skyblock for lazy Sundays.',
     icon: null,
     packUrl: 'https://packs.example.com/skyblock/pack.toml',
@@ -73,6 +77,7 @@ export const mockApi = {
   },
   detect: async (): Promise<Detected> => ({
     manifestUrl: settings.manifestUrl,
+    registryUrl: settings.registryUrlOverride ?? 'https://api.musterlauncher.com',
     minecraftDir: settings.minecraftDirOverride ?? '/home/you/.minecraft',
     launcherInstalled: true,
     packsDir: '/home/you/.local/share/muster/minecraft/packs',
@@ -81,8 +86,8 @@ export const mockApi = {
   }),
   listPacks: async (): Promise<Pack[]> => {
     await sleep(300);
-    if (!settings.manifestUrl) throw new Error('no pack list configured — set a manifest URL in Settings');
-    return packs();
+    if (!settings.manifestUrl && settings.codes.length === 0) throw new Error('no packs yet — enter a pack code, or set a pack list URL in Settings');
+    return packs().filter((p) => (p.source === 'code' ? settings.codes.some((c) => c.code === p.code) : !!settings.manifestUrl));
   },
   checkPack: async (id: string): Promise<PackCheck> => {
     await sleep(500);
@@ -131,6 +136,17 @@ export const mockApi = {
   },
   openLauncher: async (): Promise<void> => {},
   launcherRunning: async (): Promise<boolean> => false,
+  addPackCode: async (input: string): Promise<Pack> => {
+    await sleep(400);
+    const code = input.trim().toLowerCase().replace(/^.*\//, '').replace(/\s+/g, '-');
+    if (!/^[a-z0-9]+(-[a-z0-9]+)+$/.test(code)) throw new Error(`"${input}" does not look like a pack code (e.g. amber-otter-42)`);
+    if (code !== 'plum-weasel-23') throw new Error('no pack is registered with that code');
+    if (!settings.codes.some((c) => c.code === code)) settings.codes = [...settings.codes, { code, addedAtMs: Date.now(), pack: null }];
+    return packs()[0];
+  },
+  removePackCode: async (code: string): Promise<void> => {
+    settings.codes = settings.codes.filter((c) => c.code !== code);
+  },
   getLaunchSettings: async (id: string): Promise<LaunchSettings> => launchFor(id).launch,
   setLaunchSettings: async (id: string, ls: LaunchSettings): Promise<LaunchSettings> => {
     if (ls.args.some((a) => /\s/.test(a) || a === '')) throw new Error(`JVM argument contains whitespace, which the Minecraft launcher cannot pass on`);
