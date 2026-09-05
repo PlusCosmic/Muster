@@ -1,7 +1,7 @@
 // Central state for the Minecraft module. Every backend call lives here;
 // components render and dispatch.
 import * as backend from '../backend';
-import type { Detected, Pack, PackCheck, Settings, SyncProgress, SyncReport } from '../types';
+import type { Detected, LaunchSettings, Pack, PackCheck, Settings, SyncProgress, SyncReport } from '../types';
 import { toastError, toastInfo, toastSuccess } from '$lib/shell/stores/toasts.svelte';
 
 export const NO_MANIFEST = 'no pack list configured';
@@ -146,9 +146,38 @@ class PacksStore {
     }
   }
 
+  /** Save a pack's launch settings; the launcher profile is rewritten by the backend. */
+  async setLaunch(id: string, ls: LaunchSettings): Promise<boolean> {
+    try {
+      const stored = await backend.setLaunchSettings(id, ls);
+      this.patchLaunch(id, stored, true);
+      toastSuccess('Launch settings saved', `${this.nameOf(id)} will use ${(stored.maxMemoryMb / 1024).toFixed(1).replace(/\.0$/, '')} GB.`);
+      return true;
+    } catch (e) {
+      toastError('Could not save launch settings', e);
+      return false;
+    }
+  }
+
+  async resetLaunch(id: string): Promise<boolean> {
+    try {
+      const stored = await backend.resetLaunchSettings(id);
+      this.patchLaunch(id, stored, false);
+      toastSuccess('Launch settings reset', 'Back to what the pack recommends for this machine.');
+      return true;
+    } catch (e) {
+      toastError('Could not reset launch settings', e);
+      return false;
+    }
+  }
+
+  private patchLaunch(id: string, launch: LaunchSettings, customised: boolean) {
+    this.packs = this.packs.map((p) => (p.id === id ? { ...p, launch, launchCustomised: customised } : p));
+  }
+
   /** First-run: save just the manifest URL and load. */
   async setManifestUrl(url: string): Promise<boolean> {
-    return this.updateSettings({ ...(this.settings ?? { manifestUrl: null, minecraftDirOverride: null }), manifestUrl: url });
+    return this.updateSettings({ ...(this.settings ?? { manifestUrl: null, minecraftDirOverride: null, packs: {} }), manifestUrl: url });
   }
 
   nameOf(id: string): string {

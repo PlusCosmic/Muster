@@ -24,6 +24,44 @@ export interface Detected {
      * PacksDir is where packs are installed.
      */
     "packsDir": string;
+
+    /**
+     * TotalMemoryMb is this machine's physical memory; 0 if unknown.
+     */
+    "totalMemoryMb": number;
+
+    /**
+     * MaxHeapMb is the largest heap the memory slider offers (about three
+     * quarters of TotalMemoryMb); 0 if unknown.
+     */
+    "maxHeapMb": number;
+}
+
+/**
+ * LaunchSettings is how a pack is launched on this machine. A pack only
+ * recommends; these are what the launcher profile actually gets.
+ */
+export interface LaunchSettings {
+    /**
+     * MaxMemoryMb is the Java heap (-Xmx). Clamped to Detected.maxHeapMb.
+     */
+    "maxMemoryMb": number;
+
+    /**
+     * MinMemoryMb is -Xms when set; nil lets the JVM start small and grow.
+     */
+    "minMemoryMb": number | null;
+
+    /**
+     * Args are the extra JVM options.
+     */
+    "args": string[] | null;
+
+    /**
+     * FollowRecommendedArgs: Args track the pack's recommendation as it
+     * changes. Editing them pins them (false).
+     */
+    "followRecommendedArgs": boolean;
 }
 
 /**
@@ -47,9 +85,24 @@ export interface Pack {
     "icon": string | null;
     "packUrl": string;
     "server": string | null;
-    "minMemoryMb": number;
-    "maxMemoryMb": number;
-    "javaArgs": string[] | null;
+
+    /**
+     * What the pack's author recommends; advisory.
+     */
+    "recommendedMinMemoryMb": number;
+    "recommendedMaxMemoryMb": number;
+    "recommendedArgs": string[] | null;
+
+    /**
+     * Launch is what this machine will actually use: the saved settings, or
+     * the recommendation fitted to this machine when nothing is saved yet.
+     */
+    "launch": LaunchSettings;
+
+    /**
+     * LaunchCustomised: the user has saved launch settings for this pack.
+     */
+    "launchCustomised": boolean;
     "installDir": string;
     "installed": boolean;
     "installedVersion": string | null;
@@ -100,6 +153,13 @@ export interface Settings {
      * MinecraftDirOverride replaces the detected `.minecraft` directory.
      */
     "minecraftDirOverride": string | null;
+
+    /**
+     * Packs holds each pack's launch settings, by pack id, once the user has
+     * touched them. Absent ⇒ derived from the pack's recommendation and this
+     * machine's memory (see LaunchSettings).
+     */
+    "packs": { [_ in string]?: LaunchSettings } | null;
 }
 
 /**

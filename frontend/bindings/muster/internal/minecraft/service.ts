@@ -23,10 +23,17 @@ export function CheckPack(id: string): $CancellablePromise<models$0.PackCheck> {
 }
 
 /**
- * Detect reports the effective manifest URL and launcher location.
+ * Detect reports the effective manifest URL, launcher location and memory.
  */
 export function Detect(): $CancellablePromise<models$0.Detected> {
     return $Call.ByID(1425364701);
+}
+
+/**
+ * GetLaunchSettings returns what the pack launches with on this machine.
+ */
+export function GetLaunchSettings(id: string): $CancellablePromise<models$0.LaunchSettings> {
+    return $Call.ByID(4055746796, id);
 }
 
 export function GetSettings(): $CancellablePromise<models$0.Settings> {
@@ -54,6 +61,24 @@ export function ListPacks(): $CancellablePromise<models$0.Pack[] | null> {
  */
 export function OpenLauncher(): $CancellablePromise<void> {
     return $Call.ByID(2445975174);
+}
+
+/**
+ * ResetLaunchSettings forgets the user's launch settings for a pack, going
+ * back to the recommendation fitted to this machine, and rewrites the profile.
+ */
+export function ResetLaunchSettings(id: string): $CancellablePromise<models$0.LaunchSettings> {
+    return $Call.ByID(2836638715, id);
+}
+
+/**
+ * SetLaunchSettings saves the user's launch settings for a pack and, when the
+ * pack already has a launcher profile, rewrites that profile's javaArgs so the
+ * change applies on the next launch without a sync. Returns the settings as
+ * stored (clamped to this machine).
+ */
+export function SetLaunchSettings(id: string, ls: models$0.LaunchSettings): $CancellablePromise<models$0.LaunchSettings> {
+    return $Call.ByID(3774357824, id, ls);
 }
 
 /**
