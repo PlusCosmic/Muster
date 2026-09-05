@@ -5,13 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"strings"
 	"time"
 
 	"muster/internal/appdir"
 	"muster/internal/minecraft/java"
 	"muster/internal/minecraft/launcher"
 	"muster/internal/minecraft/loader"
+	"muster/internal/minecraft/machine"
 	"muster/internal/minecraft/manifest"
 	"muster/internal/minecraft/models"
 	"muster/internal/minecraft/packwiz"
@@ -35,6 +35,8 @@ type Service struct {
 	Installer *loader.Installer
 	// findJava locates a Java for loader installers; nil means java.Ensure.
 	findJava func(ctx context.Context, minecraftDir string, progress func(string)) (string, error)
+	// TotalMemoryMb overrides machine memory detection; nil means the real value.
+	TotalMemoryMb func() int
 }
 
 func (s *Service) installer() *loader.Installer {
@@ -90,16 +92,36 @@ func (s *Service) UpdateSettings(v models.Settings) (models.Settings, error) {
 	return v, nil
 }
 
-// Detect reports the effective manifest URL and launcher location.
+// Detect reports the effective manifest URL, launcher location and memory.
 func (s *Service) Detect() (models.Detected, error) {
 	st := loadSettings()
 	dir := minecraftDir(st)
+	total := s.totalMemory()
 	return models.Detected{
 		ManifestURL:       core.Str(manifestURL(st)),
 		MinecraftDir:      core.Str(dir),
 		LauncherInstalled: launcher.Installed(dir),
 		PacksDir:          PacksRoot(),
+		TotalMemoryMb:     total,
+		MaxHeapMb:         machine.MaxHeapMb(total),
 	}, nil
+}
+
+func (s *Service) totalMemory() int {
+	if s.TotalMemoryMb != nil {
+		return s.TotalMemoryMb()
+	}
+	return machine.TotalMemoryMb()
+}
+
+// launchFor is the effective launch settings for a manifest pack.
+func (s *Service) launchFor(p manifest.Pack, st models.Settings) (models.LaunchSettings, bool) {
+	saved, ok := st.Packs[p.ID]
+	var sp *models.LaunchSettings
+	if ok {
+		sp = &saved
+	}
+	return effectiveLaunch(p.Recommended, sp, machine.MaxHeapMb(s.totalMemory())), ok
 }
 
 // ErrNoManifest is returned when no manifest URL is configured.
@@ -119,20 +141,24 @@ func (s *Service) ListPacks() ([]models.Pack, error) {
 	if err != nil {
 		return nil, err
 	}
-	dir := minecraftDir(loadSettings())
+	st := loadSettings()
+	dir := minecraftDir(st)
 	out := make([]models.Pack, 0, len(m.Packs))
 	for _, p := range m.Packs {
-		out = append(out, s.describe(p, dir))
+		out = append(out, s.describe(p, dir, st))
 	}
 	return out, nil
 }
 
-func (s *Service) describe(p manifest.Pack, minecraftDir string) models.Pack {
+func (s *Service) describe(p manifest.Pack, minecraftDir string, st models.Settings) models.Pack {
 	installDir := PackDir(p.ID)
+	launch, customised := s.launchFor(p, st)
 	out := models.Pack{
 		ID: p.ID, Name: p.Name, Description: p.Description, Icon: core.Str(p.Icon),
 		PackURL: p.PackURL, Server: core.Str(p.Server),
-		MinMemoryMb: p.Java.MinMemoryMb, MaxMemoryMb: p.Java.MaxMemoryMb, JavaArgs: core.NonNil(p.Java.Args),
+		RecommendedMinMemoryMb: p.Recommended.MinMemoryMb, RecommendedMaxMemoryMb: p.Recommended.MaxMemoryMb,
+		RecommendedArgs: core.NonNil(p.Recommended.Args),
+		Launch:          launch, LaunchCustomised: customised,
 		InstallDir: installDir,
 	}
 	if st, err := packwiz.LoadState(installDir); err == nil && st.PackVersion != "" {
@@ -254,21 +280,96 @@ func (s *Service) SyncPack(id string) (models.SyncReport, error) {
 	out.LoaderInstalled = true
 
 	s.publish(SyncEvent, models.SyncProgress{ID: id, Phase: "profile", Current: p.Name})
-	err = launcher.Upsert(mcDir, id, launcher.Profile{
-		Name:          p.Name,
-		Icon:          profileIcon(p),
-		LastVersionID: versionID,
-		GameDir:       dir,
-		JavaArgs:      javaArgs(p.Java),
-	})
-	if err != nil {
-		return out, fmt.Errorf("could not write the launcher profile: %w", err)
+	launch, _ := s.launchFor(p, loadSettings())
+	if err := s.writeProfile(mcDir, p, versionID, dir, launch); err != nil {
+		return out, err
 	}
 	out.ProfileWritten = true
 	// The launcher reads its profiles on start, so one written while it is
 	// open only shows after a restart. Nothing is lost; the UI says so.
 	out.LauncherOpen = launcher.Running()
 	return out, nil
+}
+
+func (s *Service) writeProfile(mcDir string, p manifest.Pack, versionID, gameDir string, launch models.LaunchSettings) error {
+	err := launcher.Upsert(mcDir, p.ID, launcher.Profile{
+		Name:          p.Name,
+		Icon:          profileIcon(p),
+		LastVersionID: versionID,
+		GameDir:       gameDir,
+		JavaArgs:      javaArgs(launch),
+	})
+	if err != nil {
+		return fmt.Errorf("could not write the launcher profile: %w", err)
+	}
+	return nil
+}
+
+// GetLaunchSettings returns what the pack launches with on this machine.
+func (s *Service) GetLaunchSettings(id string) (models.LaunchSettings, error) {
+	p, err := s.findPack(context.Background(), id)
+	if err != nil {
+		return models.LaunchSettings{}, err
+	}
+	launch, _ := s.launchFor(p, loadSettings())
+	return launch, nil
+}
+
+// SetLaunchSettings saves the user's launch settings for a pack and, when the
+// pack already has a launcher profile, rewrites that profile's javaArgs so the
+// change applies on the next launch without a sync. Returns the settings as
+// stored (clamped to this machine).
+func (s *Service) SetLaunchSettings(id string, ls models.LaunchSettings) (models.LaunchSettings, error) {
+	p, err := s.findPack(context.Background(), id)
+	if err != nil {
+		return models.LaunchSettings{}, err
+	}
+	fitted := effectiveLaunch(p.Recommended, &ls, machine.MaxHeapMb(s.totalMemory()))
+	if err := validateLaunch(fitted); err != nil {
+		return models.LaunchSettings{}, err
+	}
+	st := loadSettings()
+	stored := fitted
+	if stored.FollowRecommendedArgs {
+		stored.Args = []string{} // derived at read time while following
+	}
+	st.Packs[id] = stored
+	if err := saveSettings(st); err != nil {
+		return models.LaunchSettings{}, err
+	}
+	mcDir := minecraftDir(st)
+	if mcDir != "" {
+		if prof, ok, _ := launcher.Get(mcDir, id); ok {
+			if err := s.writeProfile(mcDir, p, prof.LastVersionID, prof.GameDir, fitted); err != nil {
+				return models.LaunchSettings{}, err
+			}
+		}
+	}
+	return fitted, nil
+}
+
+// ResetLaunchSettings forgets the user's launch settings for a pack, going
+// back to the recommendation fitted to this machine, and rewrites the profile.
+func (s *Service) ResetLaunchSettings(id string) (models.LaunchSettings, error) {
+	p, err := s.findPack(context.Background(), id)
+	if err != nil {
+		return models.LaunchSettings{}, err
+	}
+	st := loadSettings()
+	delete(st.Packs, id)
+	if err := saveSettings(st); err != nil {
+		return models.LaunchSettings{}, err
+	}
+	launch, _ := s.launchFor(p, st)
+	mcDir := minecraftDir(st)
+	if mcDir != "" {
+		if prof, ok, _ := launcher.Get(mcDir, id); ok {
+			if err := s.writeProfile(mcDir, p, prof.LastVersionID, prof.GameDir, launch); err != nil {
+				return models.LaunchSettings{}, err
+			}
+		}
+	}
+	return launch, nil
 }
 
 // OpenLauncher starts the official Minecraft launcher.
@@ -285,21 +386,6 @@ func manuals(in []packwiz.Manual) []models.Manual {
 		out = append(out, models.Manual{Path: m.Path, Name: m.Name, URL: m.URL, Why: m.Why})
 	}
 	return out
-}
-
-// javaArgs renders the manifest's Java configuration as the launcher's single
-// javaArgs string. The launcher's own default is `-Xmx2G` plus GC tuning, so
-// a pack without memory settings gets nothing here and keeps that default.
-func javaArgs(j manifest.Java) string {
-	var parts []string
-	if j.MinMemoryMb > 0 {
-		parts = append(parts, fmt.Sprintf("-Xms%dM", j.MinMemoryMb))
-	}
-	if j.MaxMemoryMb > 0 {
-		parts = append(parts, fmt.Sprintf("-Xmx%dM", j.MaxMemoryMb))
-	}
-	parts = append(parts, j.Args...)
-	return strings.Join(parts, " ")
 }
 
 // profileIcon picks a launcher icon. The launcher accepts its built-in block

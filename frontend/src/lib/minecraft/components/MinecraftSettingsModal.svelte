@@ -11,7 +11,7 @@
 
   let { onclose }: { onclose: () => void } = $props();
 
-  const blank: Settings = { manifestUrl: null, minecraftDirOverride: null };
+  const blank: Settings = { manifestUrl: null, minecraftDirOverride: null, packs: {} };
   let draft = $state<Settings>({ ...(packs.settings ?? blank) });
   let draftTheme = $state(theme.current);
   let draftTitlebar = $state(titlebar.current);

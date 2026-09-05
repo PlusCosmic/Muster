@@ -3,17 +3,24 @@
 // shapes are bound by docs/ARCHITECTURE.md.
 import { Events } from '@wailsio/runtime';
 import * as Svc from '$bindings/muster/internal/minecraft/service';
-import type { Detected, Pack, PackCheck, Settings, SyncProgress, SyncReport } from './types';
+import type { Detected, LaunchSettings, Pack, PackCheck, Settings, SyncProgress, SyncReport } from './types';
 
 export const SYNC_EVENT = 'minecraft:sync';
 
-export const getSettings = (): Promise<Settings> => Svc.GetSettings();
-export const updateSettings = (settings: Settings): Promise<Settings> => Svc.UpdateSettings(settings);
+export const getSettings = (): Promise<Settings> => Svc.GetSettings() as Promise<Settings>;
+export const updateSettings = (settings: Settings): Promise<Settings> =>
+  Svc.UpdateSettings(settings) as Promise<Settings>;
 export const detect = (): Promise<Detected> => Svc.Detect();
 export const listPacks = (): Promise<Pack[]> => Svc.ListPacks().then((p) => (p ?? []) as Pack[]);
 export const checkPack = (id: string): Promise<PackCheck> => Svc.CheckPack(id);
 export const syncPack = (id: string): Promise<SyncReport> => Svc.SyncPack(id) as Promise<SyncReport>;
 export const openLauncher = (): Promise<void> => Svc.OpenLauncher();
+export const getLaunchSettings = (id: string): Promise<LaunchSettings> =>
+  Svc.GetLaunchSettings(id) as Promise<LaunchSettings>;
+export const setLaunchSettings = (id: string, ls: LaunchSettings): Promise<LaunchSettings> =>
+  Svc.SetLaunchSettings(id, ls) as Promise<LaunchSettings>;
+export const resetLaunchSettings = (id: string): Promise<LaunchSettings> =>
+  Svc.ResetLaunchSettings(id) as Promise<LaunchSettings>;
 export const launcherRunning = (): Promise<boolean> => Svc.LauncherRunning();
 
 /** Subscribe to sync progress. Returns an unsubscribe function. */

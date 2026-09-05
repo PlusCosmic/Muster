@@ -9,11 +9,15 @@
 //	      "description": "…",                      // optional
 //	      "icon": "https://…/icon.png",             // optional
 //	      "pack": "https://…/<slug>/pack.toml",     // the packwiz pack
-//	      "java": { "minMemoryMb": 4096, "maxMemoryMb": 8192, "args": ["-XX:+UseZGC"] },
+//	      "recommended": { "minMemoryMb": 4096, "maxMemoryMb": 8192, "args": ["-XX:+UseZGC"] },
 //	      "server": "play.example.com"              // optional, offered as a quick-join
 //	    }
 //	  ]
 //	}
+//
+// "recommended" is advice, not configuration: every machine differs, so Muster
+// shows it and lets the user set the heap and JVM args they actually want
+// (the older key "java" is still read as the same thing).
 //
 // Minecraft version and loader are not repeated here: pack.toml already
 // carries them. Muster ships with no manifest of its own; users paste the
@@ -39,17 +43,20 @@ type Manifest struct {
 
 // Pack is one offered pack.
 type Pack struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	Icon        string `json:"icon"`
-	PackURL     string `json:"pack"`
-	Java        Java   `json:"java"`
-	Server      string `json:"server"`
+	ID          string      `json:"id"`
+	Name        string      `json:"name"`
+	Description string      `json:"description"`
+	Icon        string      `json:"icon"`
+	PackURL     string      `json:"pack"`
+	Recommended Recommended `json:"recommended"`
+	Server      string      `json:"server"`
+	// LegacyJava is the pre-rename spelling of Recommended.
+	LegacyJava *Recommended `json:"java,omitempty"`
 }
 
-// Java is the launch configuration the author recommends.
-type Java struct {
+// Recommended is the launch configuration the author suggests: a heap range
+// and JVM args. Advisory; see LaunchSettings on the Muster side.
+type Recommended struct {
 	MinMemoryMb int      `json:"minMemoryMb"`
 	MaxMemoryMb int      `json:"maxMemoryMb"`
 	Args        []string `json:"args"`
@@ -65,6 +72,13 @@ func Parse(data []byte) (Manifest, error) {
 	}
 	seen := map[string]bool{}
 	for i, p := range m.Packs {
+		if p.LegacyJava != nil {
+			if p.Recommended.MaxMemoryMb == 0 && p.Recommended.MinMemoryMb == 0 && len(p.Recommended.Args) == 0 {
+				p.Recommended = *p.LegacyJava
+			}
+			p.LegacyJava = nil
+			m.Packs[i] = p
+		}
 		if !idRe.MatchString(p.ID) {
 			return Manifest{}, fmt.Errorf("manifest: pack %d has bad id %q", i, p.ID)
 		}
@@ -78,10 +92,10 @@ func Parse(data []byte) (Manifest, error) {
 		if u, err := url.Parse(p.PackURL); err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" {
 			return Manifest{}, fmt.Errorf("manifest: pack %q has bad pack url %q", p.ID, p.PackURL)
 		}
-		if p.Java.MaxMemoryMb != 0 && p.Java.MinMemoryMb > p.Java.MaxMemoryMb {
+		if p.Recommended.MaxMemoryMb != 0 && p.Recommended.MinMemoryMb > p.Recommended.MaxMemoryMb {
 			return Manifest{}, fmt.Errorf("manifest: pack %q has minMemoryMb > maxMemoryMb", p.ID)
 		}
-		for _, a := range p.Java.Args {
+		for _, a := range p.Recommended.Args {
 			// The launcher stores JVM options as one space-separated string and
 			// splits it on whitespace with no quoting, so an argument containing
 			// whitespace cannot be represented; refuse rather than mangle it.
@@ -89,8 +103,8 @@ func Parse(data []byte) (Manifest, error) {
 				return Manifest{}, fmt.Errorf("manifest: pack %q has a java arg with whitespace: %q", p.ID, a)
 			}
 		}
-		if p.Java.Args == nil {
-			m.Packs[i].Java.Args = []string{}
+		if p.Recommended.Args == nil {
+			m.Packs[i].Recommended.Args = []string{}
 		}
 	}
 	if m.Packs == nil {
