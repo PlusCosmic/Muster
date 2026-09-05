@@ -37,6 +37,7 @@ func TestParseRejects(t *testing.T) {
 		"bad url":   `{"packs":[{"id":"a","name":"x","pack":"file:///etc/passwd"}]}`,
 		"min > max": `{"packs":[{"id":"a","name":"x","pack":"https://x/p.toml","java":{"minMemoryMb":9,"maxMemoryMb":8}}]}`,
 		"not json":  `nope`,
+		"arg space": `{"packs":[{"id":"a","name":"x","pack":"https://x/p.toml","java":{"args":["-Dcache.dir=C:\\Program Files\\Cache"]}}]}`,
 	}
 	for name, doc := range cases {
 		if _, err := Parse([]byte(doc)); err == nil {
