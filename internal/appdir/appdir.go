@@ -1,10 +1,17 @@
-// Package appdir locates the app-owned data root:
+// Package appdir locates the app-owned data root and the per-game roots
+// beneath it:
 //
-//	<data>/rimforge/
-//	  profiles/<slug>/   registry.json   settings.json   cache/
+//	<data>/muster/
+//	  settings.json        # common settings (none yet)
+//	  rimworld/            # everything the RimWorld game module owns
+//	  minecraft/           # everything the Minecraft game module owns
 //
-// RIMFORGE_DATA_DIR, when set, replaces the whole root. It exists so tests
-// (and anyone relocating their profiles) can point the app at another disk.
+// What lives inside a game root is that module's business (see
+// internal/rimworld/paths for RimWorld's layout). MUSTER_DATA_DIR, when set,
+// replaces the whole root. It exists so tests (and anyone relocating their
+// data) can point the app at another disk. RIMFORGE_DATA_DIR, the
+// predecessor's equivalent, is honoured as a fallback so an installation that
+// relocated its data keeps finding it; see MigrateLegacy.
 package appdir
 
 import (
@@ -13,6 +20,28 @@ import (
 	"path/filepath"
 	"runtime"
 )
+
+// Game identifies a game module's subtree under the data root.
+type Game string
+
+const (
+	RimWorld  Game = "rimworld"
+	Minecraft Game = "minecraft"
+)
+
+// dirName is the app's directory under the platform data directory.
+const dirName = "muster"
+
+// legacyDirName is where RimForge, the RimWorld-only predecessor, kept its
+// data. See MigrateLegacy.
+const legacyDirName = "rimforge"
+
+// EnvDataDir is the environment variable that replaces the data root.
+const EnvDataDir = "MUSTER_DATA_DIR"
+
+// EnvLegacyDataDir is RimForge's data-root override. When set and EnvDataDir
+// is not, it is the data root: the directory it names is migrated in place.
+const EnvLegacyDataDir = "RIMFORGE_DATA_DIR"
 
 // dataDir mirrors the Rust `dirs::data_dir()` this app was built on:
 // $XDG_DATA_HOME (~/.local/share) on Linux, ~/Library/Application Support on
@@ -40,30 +69,118 @@ func dataDir() (string, bool) {
 	}
 }
 
-// DataRoot is `<data>/rimforge` — root of everything the app owns.
-func DataRoot() string {
-	if dir := os.Getenv("RIMFORGE_DATA_DIR"); dir != "" {
-		return dir
-	}
+func baseDir() string {
 	base, ok := dataDir()
 	if !ok {
 		if home, err := os.UserHomeDir(); err == nil {
-			base = home
-		} else {
-			base = "."
+			return home
 		}
+		return "."
 	}
-	return filepath.Join(base, "rimforge")
+	return base
 }
 
-// ProfilesRoot is `<data>/rimforge/profiles`.
-func ProfilesRoot() string { return filepath.Join(DataRoot(), "profiles") }
+// DataRoot is `<data>/muster` — root of everything the app owns.
+func DataRoot() string {
+	if dir := os.Getenv(EnvDataDir); dir != "" {
+		return dir
+	}
+	if dir := os.Getenv(EnvLegacyDataDir); dir != "" {
+		return dir
+	}
+	return filepath.Join(baseDir(), dirName)
+}
 
-// CacheRoot is `<data>/rimforge/cache`.
-func CacheRoot() string { return filepath.Join(DataRoot(), "cache") }
+// rootFromLegacyEnv reports whether the data root comes from RIMFORGE_DATA_DIR.
+func rootFromLegacyEnv() bool {
+	return os.Getenv(EnvDataDir) == "" && os.Getenv(EnvLegacyDataDir) != ""
+}
 
-// ProfileDir is `<data>/rimforge/profiles/<id>` — does not check that it exists.
-func ProfileDir(id string) string { return filepath.Join(ProfilesRoot(), id) }
+// GameRoot is `<data>/muster/<game>` — root of everything one game module owns.
+func GameRoot(game Game) string { return filepath.Join(DataRoot(), string(game)) }
+
+// legacyRoot is the RimForge data directory that MigrateLegacy adopts: the
+// sibling of the data root named `rimforge`. Deriving it from DataRoot rather
+// than the platform data dir keeps the migration testable under MUSTER_DATA_DIR.
+func legacyRoot() string { return filepath.Join(filepath.Dir(DataRoot()), legacyDirName) }
+
+// MigrateLegacy adopts a RimForge data directory as the RimWorld game root.
+//
+// RimForge kept `profiles/`, `registry.json`, `settings.json` and `cache/`
+// directly under its root; Muster keeps exactly that layout under
+// `<root>/rimworld`. Only those four entries move — RimForge's root also holds
+// WebKitGTK's own storage (`storage/`, `hsts-storage.sqlite`, …), which is
+// keyed by program name and is not ours to relocate, and a user's custom root
+// may hold anything. Two sources, same procedure:
+//
+//   - Default locations: `<data>/rimforge` ⇒ `<data>/muster/rimworld`.
+//   - RIMFORGE_DATA_DIR set (and MUSTER_DATA_DIR not): that directory *is*
+//     the data root, so its entries move into `<root>/rimworld` in place.
+//     Data the user deliberately relocated stays where they put it.
+//
+// Each entry is one same-filesystem rename, and the move is resumable: the two
+// entries that count as evidence of RimForge data (registry, profiles) go
+// last, so a run that dies part-way always leaves one behind for the next run
+// to pick up. Once Muster has run (the destination exists) a lone
+// settings.json or cache/ is no longer taken as RimForge's, because Muster
+// keeps its own common settings.json at the root. An entry present on both
+// sides is an error rather than a guess. Returns whether anything was moved.
+func MigrateLegacy() (bool, error) {
+	src := legacyRoot()
+	if rootFromLegacyEnv() {
+		src = DataRoot()
+	}
+	return migrateEntries(src, GameRoot(RimWorld))
+}
+
+// legacyEntries is everything RimForge ever wrote to its root, in the order
+// they are moved; see MigrateLegacy for why the markers come last.
+var legacyEntries = []string{"settings.json", "cache", "registry.json", "profiles"}
+
+// legacyMarkers are the entries that always mean RimForge data.
+var legacyMarkers = []string{"registry.json", "profiles"}
+
+func anyExists(dir string, names []string) bool {
+	for _, name := range names {
+		if _, err := os.Lstat(filepath.Join(dir, name)); err == nil {
+			return true
+		}
+	}
+	return false
+}
+
+func migrateEntries(src, dst string) (bool, error) {
+	if info, err := os.Stat(src); err != nil || !info.IsDir() {
+		return false, nil
+	}
+	_, dstErr := os.Stat(dst)
+	neverRan := os.IsNotExist(dstErr)
+	if !anyExists(src, legacyMarkers) && !(neverRan && anyExists(src, legacyEntries)) {
+		return false, nil
+	}
+	if err := EnsureDir(dst); err != nil {
+		return false, err
+	}
+	moved := false
+	for _, name := range legacyEntries {
+		from := filepath.Join(src, name)
+		if _, err := os.Lstat(from); err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			return moved, fmt.Errorf("could not stat %s: %w", from, err)
+		}
+		to := filepath.Join(dst, name)
+		if _, err := os.Lstat(to); err == nil {
+			return moved, fmt.Errorf("both %s and %s exist; resolve by hand", from, to)
+		}
+		if err := os.Rename(from, to); err != nil {
+			return moved, fmt.Errorf("could not move %s into %s: %w", from, dst, err)
+		}
+		moved = true
+	}
+	return moved, nil
+}
 
 // EnsureDir creates path (and parents) if absent.
 func EnsureDir(path string) error {

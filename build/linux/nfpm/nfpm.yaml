@@ -3,26 +3,34 @@
 #
 # The lines below are called `modelines`. See `:help modeline`
 
-name: "rimforge"
+name: "muster"
 arch: ${GOARCH}
 platform: "linux"
 version: "0.1.0"
 section: "default"
 priority: "extra"
 maintainer: ${GIT_COMMITTER_NAME} <${GIT_COMMITTER_EMAIL}>
-description: "Profile and mod list manager for RimWorld"
+description: "Shared mod setups for RimWorld and Minecraft"
 vendor: "PlusCosmic"
-homepage: "https://github.com/PlusCosmic/rimforge"
+homepage: "https://github.com/PlusCosmic/Muster"
 license: "All rights reserved"
 release: "1"
 
 contents:
-  - src: "./bin/rimforge"
-    dst: "/usr/local/bin/rimforge"
+  - src: "./bin/muster"
+    dst: "/usr/local/bin/muster"
   - src: "./build/appicon.png"
-    dst: "/usr/share/icons/hicolor/128x128/apps/rimforge.png"
-  - src: "./build/linux/rimforge.desktop"
-    dst: "/usr/share/applications/rimforge.desktop"
+    dst: "/usr/share/icons/hicolor/128x128/apps/muster.png"
+  - src: "./build/linux/muster.desktop"
+    dst: "/usr/share/applications/muster.desktop"
+
+# Muster is RimForge renamed and widened to more games; installing it takes
+# over from the old package, and the app adopts the old data directory on
+# first start (internal/appdir.MigrateLegacy).
+replaces:
+  - rimforge
+conflicts:
+  - rimforge
 
 # Linux builds pass the gtk3 tag (see Taskfile.yml), so the binary links
 # GTK3 + WebKit2GTK 4.1 and the packages must depend on that stack, not the

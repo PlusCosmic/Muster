@@ -5,13 +5,13 @@
 !include "FileFunc.nsh"
 
 !ifndef INFO_PROJECTNAME
-    !define INFO_PROJECTNAME "RimForge"
+    !define INFO_PROJECTNAME "Muster"
 !endif
 !ifndef INFO_COMPANYNAME
     !define INFO_COMPANYNAME "PlusCosmic"
 !endif
 !ifndef INFO_PRODUCTNAME
-    !define INFO_PRODUCTNAME "RimForge"
+    !define INFO_PRODUCTNAME "Muster"
 !endif
 !ifndef INFO_PRODUCTVERSION
     !define INFO_PRODUCTVERSION "0.1.0"
