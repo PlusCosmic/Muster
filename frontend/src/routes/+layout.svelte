@@ -6,12 +6,22 @@
   import ToastHost from '$lib/shell/components/ToastHost.svelte';
   import { theme } from '$lib/shell/stores/theme.svelte';
   import { titlebar } from '$lib/shell/stores/titlebar.svelte';
+  import { anyUnsaved } from '$lib/shell/stores/unsaved.svelte';
 
   let { children }: { children: Snippet } = $props();
 
   theme.apply();
   titlebar.apply();
+
+  // Warn on close-with-unsaved-changes where the webview supports it. Lives
+  // here, not in a game route: a draft survives switching games, so the guard
+  // has to as well.
+  function onbeforeunload(e: BeforeUnloadEvent) {
+    if (anyUnsaved()) e.preventDefault();
+  }
 </script>
+
+<svelte:window {onbeforeunload} />
 
 <div class="app">
   <GameRail />

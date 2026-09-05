@@ -115,13 +115,14 @@ func legacyRoot() string { return filepath.Join(filepath.Dir(DataRoot()), legacy
 //     settings file or a profiles directory) ⇒ rename it to
 //     `<data>/muster/rimworld`.
 //   - RIMFORGE_DATA_DIR set (and MUSTER_DATA_DIR not): that directory *is*
-//     the data root, so it is migrated in place — its RimForge entries move
-//     into a new `rimworld/` subdirectory. Data the user deliberately
-//     relocated stays where they put it.
+//     the data root, so it is migrated in place — RimForge's own entries
+//     (and only those) move into a `rimworld/` subdirectory. Data the user
+//     deliberately relocated stays where they put it, and anything else they
+//     keep in that directory is not touched. The move is per entry and
+//     resumable: a run that fails half-way is finished by the next one.
 //
 // Any other state — both present, neither present, an unrecognised legacy
-// directory, an in-place root that already has `rimworld/` — is left alone.
-// Returns whether a migration happened.
+// directory — is left alone. Returns whether anything was moved.
 func MigrateLegacy() (bool, error) {
 	if rootFromLegacyEnv() {
 		return migrateInPlace(DataRoot())
@@ -148,32 +149,54 @@ func MigrateLegacy() (bool, error) {
 	return true, nil
 }
 
-// migrateInPlace moves a RimForge layout at root into root/rimworld.
+// legacyEntries is everything RimForge ever wrote to its root. `settings.json`
+// is listed last and is not on its own a sign of RimForge data (see
+// hasRimForgeData), because Muster will keep its own common settings.json
+// at the root.
+var legacyEntries = []string{"registry.json", "profiles", "cache", "settings.json"}
+
+// hasRimForgeData reports whether dir holds RimForge's registry or profiles —
+// the entries that mean there is something worth migrating.
+func hasRimForgeData(dir string) bool {
+	for _, name := range []string{"registry.json", "profiles"} {
+		if _, err := os.Stat(filepath.Join(dir, name)); err == nil {
+			return true
+		}
+	}
+	return false
+}
+
+// migrateInPlace moves RimForge's entries at root into root/rimworld, one
+// rename each. Entries already gone from the root are skipped, so a run that
+// stopped part-way resumes; an entry present on both sides is an error rather
+// than a guess.
 func migrateInPlace(root string) (bool, error) {
-	if !looksLikeRimForge(root) {
+	if !hasRimForgeData(root) {
 		return false, nil
 	}
 	dst := filepath.Join(root, string(RimWorld))
-	if _, err := os.Stat(dst); err == nil {
-		// Already migrated (or a mixed state we must not guess about).
-		return false, nil
-	} else if !os.IsNotExist(err) {
-		return false, fmt.Errorf("could not stat %s: %w", dst, err)
-	}
-	entries, err := os.ReadDir(root)
-	if err != nil {
-		return false, fmt.Errorf("could not read %s: %w", root, err)
-	}
 	if err := EnsureDir(dst); err != nil {
 		return false, err
 	}
-	for _, e := range entries {
-		from := filepath.Join(root, e.Name())
-		if err := os.Rename(from, filepath.Join(dst, e.Name())); err != nil {
-			return false, fmt.Errorf("could not move %s into %s: %w", from, dst, err)
+	moved := false
+	for _, name := range legacyEntries {
+		from := filepath.Join(root, name)
+		if _, err := os.Lstat(from); err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			return moved, fmt.Errorf("could not stat %s: %w", from, err)
 		}
+		to := filepath.Join(dst, name)
+		if _, err := os.Lstat(to); err == nil {
+			return moved, fmt.Errorf("both %s and %s exist; resolve by hand", from, to)
+		}
+		if err := os.Rename(from, to); err != nil {
+			return moved, fmt.Errorf("could not move %s into %s: %w", from, dst, err)
+		}
+		moved = true
 	}
-	return true, nil
+	return moved, nil
 }
 
 func looksLikeRimForge(dir string) bool {

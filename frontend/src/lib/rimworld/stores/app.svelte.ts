@@ -12,6 +12,7 @@ import type {
   SortWarning
 } from '$lib/rimworld/types';
 import { toastError, toastSuccess } from '$lib/shell/stores/toasts.svelte';
+import { registerUnsavedCheck } from '$lib/shell/stores/unsaved.svelte';
 
 export const CORE_ID = 'ludeon.rimworld';
 
@@ -412,3 +413,6 @@ class AppStore {
 }
 
 export const app = new AppStore();
+
+// The window-close guard in the shell layout asks every game module.
+registerUnsavedCheck(() => app.dirty);

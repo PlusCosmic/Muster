@@ -60,11 +60,65 @@ func TestMigrateLegacyMovesRelocatedRootInPlace(t *testing.T) {
 	}
 }
 
+func TestMigrateLegacyInPlaceMovesOnlyRimForgeEntries(t *testing.T) {
+	base := t.TempDir()
+	root := seedLegacy(t, base, "registry.json", "profiles/a/Config/ModsConfig.xml", "notes.txt", "backups/old.zip")
+	t.Setenv(EnvDataDir, "")
+	t.Setenv(EnvLegacyDataDir, root)
+	if moved, err := MigrateLegacy(); err != nil || !moved {
+		t.Fatalf("%v, %v", moved, err)
+	}
+	for _, f := range []string{"notes.txt", "backups/old.zip"} {
+		if _, err := os.Stat(filepath.Join(root, f)); err != nil {
+			t.Fatalf("%s should have stayed put: %v", f, err)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(root, "rimworld", "profiles", "a", "Config", "ModsConfig.xml")); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestMigrateLegacyInPlaceResumesAfterPartialMove(t *testing.T) {
+	base := t.TempDir()
+	root := seedLegacy(t, base, "registry.json", "profiles/a/x", "cache/communityRules.json", "settings.json")
+	t.Setenv(EnvDataDir, "")
+	t.Setenv(EnvLegacyDataDir, root)
+	// Simulate a run that moved the registry and then died.
+	if err := os.MkdirAll(filepath.Join(root, "rimworld"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(filepath.Join(root, "registry.json"), filepath.Join(root, "rimworld", "registry.json")); err != nil {
+		t.Fatal(err)
+	}
+	if moved, err := MigrateLegacy(); err != nil || !moved {
+		t.Fatalf("%v, %v", moved, err)
+	}
+	for _, f := range []string{"registry.json", "profiles/a/x", "cache/communityRules.json", "settings.json"} {
+		if _, err := os.Stat(filepath.Join(root, "rimworld", f)); err != nil {
+			t.Fatalf("%s: %v", f, err)
+		}
+	}
+}
+
+func TestMigrateLegacyInPlaceRefusesConflicts(t *testing.T) {
+	base := t.TempDir()
+	root := seedLegacy(t, base, "registry.json", "rimworld/registry.json")
+	t.Setenv(EnvDataDir, "")
+	t.Setenv(EnvLegacyDataDir, root)
+	if _, err := MigrateLegacy(); err == nil {
+		t.Fatal("expected an error for an entry present on both sides")
+	}
+	if _, err := os.Stat(filepath.Join(root, "registry.json")); err != nil {
+		t.Fatalf("source should be untouched: %v", err)
+	}
+}
+
 func TestMigrateLegacyInPlaceLeavesNewLayoutAlone(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv(EnvDataDir, "")
 	t.Setenv(EnvLegacyDataDir, root)
-	// Already in Muster's layout, plus a stray legacy-looking file: don't touch.
+	// Already in Muster's layout, plus Muster's own common settings.json at the
+	// root: nothing here is RimForge data, so nothing moves.
 	for _, f := range []string{"rimworld/registry.json", "settings.json"} {
 		p := filepath.Join(root, f)
 		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
