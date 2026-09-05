@@ -7,4 +7,10 @@
 export interface AppInfo {
     "version": string;
     "dataRoot": string;
+
+    /**
+     * SelfUpdates: this build checks for and installs its own updates
+     * (Windows/macOS release builds). The Arch package updates through pacman.
+     */
+    "selfUpdates": boolean;
 }

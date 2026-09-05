@@ -68,7 +68,7 @@ func TestNeoForgeRunsInstallerAndCleansInjectedProfile(t *testing.T) {
 
 	mc := t.TempDir()
 	// The user already has a profile; the installer must not disturb it.
-	if err := launcher.Upsert(mc, "cobblemon", launcher.Profile{Name: "Pack", LastVersionID: "neoforge-21.1.248"}); err != nil {
+	if err := launcher.Upsert(mc, "frontier", launcher.Profile{Name: "Pack", LastVersionID: "neoforge-21.1.248"}); err != nil {
 		t.Fatal(err)
 	}
 	var ran []string
@@ -109,7 +109,7 @@ func TestNeoForgeRunsInstallerAndCleansInjectedProfile(t *testing.T) {
 	if strings.Contains(string(raw), `"NeoForge"`) {
 		t.Fatalf("injected profile should be removed: %s", raw)
 	}
-	if _, ok, _ := launcher.Get(mc, "cobblemon"); !ok {
+	if _, ok, _ := launcher.Get(mc, "frontier"); !ok {
 		t.Fatal("our profile must survive")
 	}
 	if entries, _ := os.ReadDir(work); len(entries) != 0 {

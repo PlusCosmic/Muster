@@ -114,7 +114,8 @@ Each game's `frontend/src/lib/<game>/types.ts` narrows the generated
 | Method | Args | Returns | Notes |
 |---|---|---|---|
 | `RevealPath` | `path` | — | show in system file manager (`Env.OpenFileManager`) |
-| `GetAppInfo` | — | `AppInfo` | `{ version, dataRoot }` |
+| `GetAppInfo` | — | `AppInfo` | `{ version, dataRoot, selfUpdates }` |
+| `CheckForUpdates` | — | — | open the update window and install a newer release if there is one; no-op unless `selfUpdates` |
 
 ### RimWorld service (`internal/rimworld/service.go`)
 
@@ -155,7 +156,7 @@ Each game's `frontend/src/lib/<game>/types.ts` narrows the generated
 App (`internal/models/models.go`):
 
 ```
-AppInfo         { version, dataRoot }
+AppInfo         { version, dataRoot, selfUpdates }
 ```
 
 RimWorld (`internal/rimworld/models/models.go`):
@@ -179,7 +180,7 @@ RulesDbStatus   { cached: bool, fetchedAtMs?, ruleCount }
 Minecraft (`internal/minecraft/models/models.go`):
 
 ```
-Settings        { manifestUrlOverride?, minecraftDirOverride? }
+Settings        { manifestUrl?, minecraftDirOverride? }
 Detected        { manifestUrl?, minecraftDir?, launcherInstalled, packsDir }
 Pack            { id, name, description, icon?, packUrl, server?, minMemoryMb, maxMemoryMb,
                   javaArgs: string[], installDir, installed, installedVersion?, syncedAtMs?,
@@ -299,8 +300,8 @@ One JSON document at a URL the pack author controls:
 
 ```jsonc
 { "packs": [ {
-    "id": "cobblemon",                        // [a-z0-9-], names packs/<id>
-    "name": "Cosmic's Cobblemon",
+    "id": "frontier",                         // [a-z0-9-], names packs/<id>
+    "name": "Frontier",
     "description": "…", "icon": "https://…",  // optional
     "pack": "https://…/<slug>/pack.toml",     // the packwiz pack
     "java": { "minMemoryMb": 4096, "maxMemoryMb": 8192, "args": ["-XX:+UseZGC"] },
@@ -309,11 +310,11 @@ One JSON document at a URL the pack author controls:
 ```
 
 Minecraft version and loader come from `pack.toml`, never from the manifest.
-The manifest URL is a private pack's privacy layer (as the pack URL's slug
-is), so the built-in default is injected at build time with
-`-ldflags "-X muster/internal/minecraft.DefaultManifestURL=…"` rather than
-committed; an empty default means the UI asks for one. The settings override
-always wins.
+Muster ships with no manifest and knows about no particular pack: the user
+pastes the URL of the list they were given (first-run card or Settings), and
+it is stored in the module's `settings.json`. Nothing in this repository or
+in any build names a pack; that keeps the app usable by anyone with a
+packwiz pack to share, and keeps a private pack's URL out of a public repo.
 
 ### Sync
 
@@ -399,6 +400,30 @@ already exists, i.e. whether a sync would need to install it.
 Definition of done: backend ⇒ `go vet -tags gtk3 ./...` clean, `gofmt -l .`
 empty, and unit tests for pure logic (`go test -tags gtk3 ./...`); frontend ⇒
 `npm run check` clean and `npm run build` succeeds in `frontend/`.
+
+## Self-update
+
+Builds for platforms without a package manager (Windows today, macOS when it
+ships) update themselves through Wails' updater (`pkg/updater`) with the
+`endpoint` provider: the signed Wails update manifest `stable.json` attached
+to the latest GitHub release, at `version.UpdateManifestURL`
+(`github.com/PlusCosmic/Muster/releases/latest/download/stable.json`, a
+stable URL GitHub redirects to the newest release's asset). `main.go` leaves
+it off on Linux, where the package manager updates the app, and when
+`MUSTER_NO_SELF_UPDATE` is set (dev); then `AppInfo.selfUpdates` is false.
+
+Trust: every artifact is signed (ed25519ph over its sha512) with a key held
+only by the release pipeline; the matching public key is `build/updater.pub`,
+embedded in the binary and pinned as the updater's only trust root. The
+manifest URL cannot substitute a key.
+
+Behaviour: the Updater's own periodic loop opens the built-in window even
+when up to date, so `setupUpdater` runs a silent `Check` ten seconds after
+start and every six hours, and calls `CheckAndInstall` (which opens the
+window, downloads, verifies, and offers Restart & Apply) only when a release
+is found. The settings modals' About section offers a manual check.
+`version.Version` is the version of record for the comparison and must match
+the version the manifest is published under.
 
 ## Platform notes
 

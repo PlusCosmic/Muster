@@ -4,9 +4,9 @@ package models
 
 // Settings is the module's settings.json.
 type Settings struct {
-	// ManifestURLOverride replaces the built-in manifest URL (which is baked in
-	// at build time and may be empty).
-	ManifestURLOverride *string `json:"manifestUrlOverride"`
+	// ManifestURL is the pack list the user was given. Muster ships with none:
+	// the app knows nothing about any particular pack.
+	ManifestURL *string `json:"manifestUrl"`
 	// MinecraftDirOverride replaces the detected `.minecraft` directory.
 	MinecraftDirOverride *string `json:"minecraftDirOverride"`
 }

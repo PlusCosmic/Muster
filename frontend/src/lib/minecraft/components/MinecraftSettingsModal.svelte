@@ -1,4 +1,5 @@
 <script lang="ts">
+  import AboutSection from '$lib/shell/components/AboutSection.svelte';
   import AppearanceFields from '$lib/shell/components/AppearanceFields.svelte';
   import Icon from '$lib/shell/components/Icon.svelte';
   import Modal from '$lib/shell/components/Modal.svelte';
@@ -10,7 +11,7 @@
 
   let { onclose }: { onclose: () => void } = $props();
 
-  const blank: Settings = { manifestUrlOverride: null, minecraftDirOverride: null };
+  const blank: Settings = { manifestUrl: null, minecraftDirOverride: null };
   let draft = $state<Settings>({ ...(packs.settings ?? blank) });
   let draftTheme = $state(theme.current);
   let draftTitlebar = $state(titlebar.current);
@@ -63,8 +64,8 @@
   <section class="group">
     <h3>Pack list</h3>
     <p class="group-note">
-      The address of the pack list your friend group shares. Whoever runs the packs gives you this;
-      keep it private, it is what makes the packs yours to see.
+      The address of the pack list you were given by whoever runs your packs. Muster has no packs of
+      its own; this list is where they come from.
     </p>
     <div class="field">
       <label class="label" for="mc-manifest">Pack list URL</label>
@@ -74,20 +75,18 @@
           class="input mono"
           spellcheck="false"
           autocomplete="off"
-          placeholder={d?.manifestUrl && !draft.manifestUrlOverride ? d.manifestUrl : 'https://…/manifest.json'}
-          value={draft.manifestUrlOverride ?? ''}
-          oninput={(e) => setValue('manifestUrlOverride', e.currentTarget.value)}
+          placeholder="https://…/manifest.json"
+          value={draft.manifestUrl ?? ''}
+          oninput={(e) => setValue('manifestUrl', e.currentTarget.value)}
         />
-        {#if draft.manifestUrlOverride}
-          <button class="btn btn-sm" title="Clear override" onclick={() => setValue('manifestUrlOverride', '')}>
+        {#if draft.manifestUrl}
+          <button class="btn btn-sm" title="Clear" onclick={() => setValue('manifestUrl', '')}>
             <Icon name="x" size={13} />
           </button>
         {/if}
       </div>
       <p class="hint">
-        {#if d?.manifestUrl && !draft.manifestUrlOverride}
-          Using the address this build came with. Enter one here to use another list instead.
-        {:else if !d?.manifestUrl}
+        {#if !draft.manifestUrl}
           <span class="undetected"><Icon name="alert" size={11} /> No pack list yet.</span>
         {/if}
       </p>
@@ -130,6 +129,11 @@
       <dt>Packs folder</dt>
       <dd class="mono" data-selectable>{d?.packsDir ?? '—'}</dd>
     </dl>
+  </section>
+
+  <section class="group">
+    <h3>About Muster</h3>
+    <AboutSection />
   </section>
 
   {#if MOCK_ENABLED}
