@@ -83,7 +83,7 @@ func TestServiceRoundTrip(t *testing.T) {
 		t.Fatalf("expected ErrNoManifest, got %v", err)
 	}
 	m := srv.URL + "/m.json"
-	if _, err := svc.UpdateSettings(models.Settings{ManifestURLOverride: &m, MinecraftDirOverride: &mcDir}); err != nil {
+	if _, err := svc.UpdateSettings(models.Settings{ManifestURL: &m, MinecraftDirOverride: &mcDir}); err != nil {
 		t.Fatal(err)
 	}
 	det, _ := svc.Detect()

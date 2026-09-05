@@ -1,7 +1,8 @@
 name: release
 
 # Runs the definition-of-done suite on every merge to main and, only if it
-# passes, asks PlusCosmic/packages to build and publish an Arch package. This
+# passes, (a) asks PlusCosmic/packages to build and publish an Arch package and
+# (b) publishes a Windows build as a GitHub release, once per version. This
 # repository never writes to the package bucket: a single repository owns every
 # index update so that concurrent publishes cannot drop entries from the shared
 # database. See docs/RELEASING.md.
@@ -125,3 +126,104 @@ jobs:
 
           echo "Dispatched muster $version at $GITHUB_SHA" \
             >> "$GITHUB_STEP_SUMMARY"
+
+  # Windows has no package manager for us, so the app updates itself from the
+  # signed manifest attached to the latest GitHub release (docs/ARCHITECTURE.md
+  # "Self-update"). One release per version: a merge that does not bump
+  # build/config.yml republishes nothing here.
+  windows:
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Decide whether this version needs a release
+        id: version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(sed -n 's/^  version: *"\([^"]*\)".*/\1/p' build/config.yml)
+          test -n "$version" || { echo "no version in build/config.yml" >&2; exit 1; }
+          # The updater compares internal/version.Version against the manifest;
+          # publishing under any other number would never update or update forever.
+          built=$(sed -n 's/^const Version = "\([^"]*\)"/\1/p' internal/version/version.go)
+          if [ "$built" != "$version" ]; then
+            echo "internal/version.Version is $built but build/config.yml says $version" >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if gh release view "v$version" >/dev/null 2>&1; then
+            echo "v$version is already released; nothing to do" >> "$GITHUB_STEP_SUMMARY"
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/setup-node@v4
+        if: steps.version.outputs.publish == 'true'
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - uses: actions/setup-go@v5
+        if: steps.version.outputs.publish == 'true'
+        with:
+          go-version-file: go.mod
+
+      - name: Install toolchain
+        if: steps.version.outputs.publish == 'true'
+        run: |
+          # nsis builds the installer; the wails3 CLI (update manifest) links
+          # webkit2gtk-4.1 like the app does on Linux.
+          sudo apt-get update
+          sudo apt-get install -y nsis zip libwebkit2gtk-4.1-dev libgtk-3-dev
+          go install -tags gtk3 github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-beta.16
+
+      - name: Build muster.exe
+        if: steps.version.outputs.publish == 'true'
+        run: |
+          (cd frontend && npm ci && npm run build)
+          CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -tags production -trimpath -buildvcs=false \
+            -ldflags="-w -s -H windowsgui" -o bin/muster.exe .
+
+      - name: Build the installer
+        if: steps.version.outputs.publish == 'true'
+        working-directory: build/windows/nsis
+        run: |
+          # Per-user: installs to %LOCALAPPDATA%\Programs\Muster with no UAC
+          # prompt, where the updater can swap the exe without elevation.
+          makensis -DWAILS_INSTALL_SCOPE=user -DREQUEST_EXECUTION_LEVEL=user \
+            -DARG_WAILS_AMD64_BINARY="$PWD/../../../bin/muster.exe" project.nsi
+          mv ../../../bin/muster-amd64-installer.exe ../../../bin/Muster-installer.exe
+
+      - name: Sign the update manifest
+        if: steps.version.outputs.publish == 'true'
+        working-directory: bin
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          UPDATER_KEY: ${{ secrets.MUSTER_UPDATER_KEY }}
+        run: |
+          test -n "$UPDATER_KEY" || { echo "MUSTER_UPDATER_KEY secret is missing" >&2; exit 1; }
+          umask 077; printf '%s\n' "$UPDATER_KEY" > updater.key
+          zip -q "muster-$VERSION-windows-amd64.zip" muster.exe
+          # Artifact URLs point at this release's own permanent download path,
+          # so an older manifest a client already fetched stays valid.
+          wails3 updater manifest -version "$VERSION" -channel stable \
+            -name "Muster $VERSION" -key updater.key \
+            -url-prefix "https://github.com/${{ github.repository }}/releases/download/v$VERSION/" \
+            -output stable.json "muster-$VERSION-windows-amd64.zip"
+          rm -f updater.key
+          wails3 updater verify -manifest stable.json -publickey ../build/updater.pub -dir .
+
+      - name: Publish the release
+        if: steps.version.outputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          gh release create "v$VERSION" --title "Muster $VERSION" --target "$GITHUB_SHA" \
+            --notes "Windows: run Muster-installer.exe once; the app updates itself from then on. Linux (Arch): pacman." \
+            "bin/muster-$VERSION-windows-amd64.zip" bin/Muster-installer.exe bin/stable.json
+          echo "Released v$VERSION with the Windows installer and update manifest." >> "$GITHUB_STEP_SUMMARY"

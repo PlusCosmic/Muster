@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-const good = `{"packs":[{"id":"cobblemon","name":"Cosmic's Cobblemon","pack":"https://pack.example/abc/pack.toml",
+const good = `{"packs":[{"id":"frontier","name":"Frontier","pack":"https://pack.example/abc/pack.toml",
   "java":{"minMemoryMb":4096,"maxMemoryMb":8192,"args":["-XX:+UseZGC"]},"server":"play.example"}]}`
 
 func TestParseGood(t *testing.T) {

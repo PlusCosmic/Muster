@@ -4,8 +4,8 @@
 //	{
 //	  "packs": [
 //	    {
-//	      "id": "cobblemon",                       // stable, [a-z0-9-]; names the install dir
-//	      "name": "Cosmic's Cobblemon",
+//	      "id": "frontier",                        // stable, [a-z0-9-]; names the install dir
+//	      "name": "Frontier",
 //	      "description": "…",                      // optional
 //	      "icon": "https://…/icon.png",             // optional
 //	      "pack": "https://…/<slug>/pack.toml",     // the packwiz pack
@@ -16,8 +16,8 @@
 //	}
 //
 // Minecraft version and loader are not repeated here: pack.toml already
-// carries them. The manifest URL is itself the privacy layer for a private
-// pack, exactly as the pack URL's slug is.
+// carries them. Muster ships with no manifest of its own; users paste the
+// URL of the list they were given.
 package manifest
 
 import (

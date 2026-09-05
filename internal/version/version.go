@@ -9,10 +9,8 @@ package version
 // Version is the running version, without a "v" prefix.
 const Version = "0.2.0"
 
-// UpdateManifestURL is where the self-updater looks for newer releases: a
-// Wails update manifest (`wails3 updater manifest`). Injected at build time
-// (`-ldflags "-X muster/internal/version.UpdateManifestURL=…"`) by the
-// release pipeline for platforms that update themselves; empty means the
-// updater is off, which is right for dev builds and for the Arch package,
-// where pacman does the updating.
-var UpdateManifestURL string
+// UpdateManifestURL is where the self-updater looks for newer releases: the
+// signed Wails update manifest attached to the latest GitHub release. Public
+// infrastructure, so it lives in source. Whether a build uses it is decided
+// at runtime (see main.go): platforms with a package manager do not.
+const UpdateManifestURL = "https://github.com/PlusCosmic/Muster/releases/latest/download/stable.json"

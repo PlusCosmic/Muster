@@ -11,7 +11,7 @@ import (
 const existing = `{
   "profiles": {
     "abc123": {"name": "Latest release", "type": "latest-release", "lastVersionId": "latest-release", "created": "2025-01-01T00:00:00.000Z", "lastUsed": "2025-06-01T00:00:00.000Z", "icon": "Grass"},
-    "muster-cobblemon": {"name": "Old", "type": "custom", "lastVersionId": "neoforge-21.1.100", "created": "2025-03-03T00:00:00.000Z"}
+    "muster-frontier": {"name": "Old", "type": "custom", "lastVersionId": "neoforge-21.1.100", "created": "2025-03-03T00:00:00.000Z"}
   },
   "settings": {"crashAssistance": true, "enableSnapshots": false},
   "version": 3,
@@ -24,8 +24,8 @@ func TestUpsertMergesWithoutClobbering(t *testing.T) {
 	if err := os.WriteFile(path, []byte(existing), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	err := Upsert(dir, "cobblemon", Profile{
-		Name: "Cosmic's Cobblemon", LastVersionID: "neoforge-21.1.248", GameDir: `/data/packs/cobblemon`, JavaArgs: "-Xmx8G",
+	err := Upsert(dir, "frontier", Profile{
+		Name: "Frontier", LastVersionID: "neoforge-21.1.248", GameDir: `/data/packs/frontier`, JavaArgs: "-Xmx8G",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -45,8 +45,8 @@ func TestUpsertMergesWithoutClobbering(t *testing.T) {
 	if profiles["abc123"]["name"] != "Latest release" || profiles["abc123"]["icon"] != "Grass" {
 		t.Fatalf("other profile damaged: %v", profiles["abc123"])
 	}
-	ours := profiles["muster-cobblemon"]
-	if ours["name"] != "Cosmic's Cobblemon" || ours["lastVersionId"] != "neoforge-21.1.248" || ours["type"] != "custom" || ours["javaArgs"] != "-Xmx8G" {
+	ours := profiles["muster-frontier"]
+	if ours["name"] != "Frontier" || ours["lastVersionId"] != "neoforge-21.1.248" || ours["type"] != "custom" || ours["javaArgs"] != "-Xmx8G" {
 		t.Fatalf("ours: %v", ours)
 	}
 	if ours["created"] != "2025-03-03T00:00:00.000Z" {
@@ -59,8 +59,8 @@ func TestUpsertMergesWithoutClobbering(t *testing.T) {
 		t.Fatal("empty javaDir should be omitted")
 	}
 
-	got, ok, err := Get(dir, "cobblemon")
-	if err != nil || !ok || got.GameDir != "/data/packs/cobblemon" {
+	got, ok, err := Get(dir, "frontier")
+	if err != nil || !ok || got.GameDir != "/data/packs/frontier" {
 		t.Fatalf("%+v %v %v", got, ok, err)
 	}
 }
