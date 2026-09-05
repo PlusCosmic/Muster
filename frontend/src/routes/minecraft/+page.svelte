@@ -5,10 +5,31 @@
   import MinecraftSettingsModal from '$lib/minecraft/components/MinecraftSettingsModal.svelte';
   import PackCard from '$lib/minecraft/components/PackCard.svelte';
   import { packs } from '$lib/minecraft/stores/packs.svelte';
+  import { dialogs } from '$lib/shell/stores/dialogs.svelte';
 
   let settingsOpen = $state(false);
-  let manifestDraft = $state('');
-  let savingManifest = $state(false);
+  let codeDraft = $state('');
+  let addingCode = $state(false);
+
+  async function addCodeFromCard() {
+    const code = codeDraft.trim();
+    if (!code) return;
+    addingCode = true;
+    const p = await packs.addCode(code);
+    addingCode = false;
+    if (p) codeDraft = '';
+  }
+
+  async function addCodeFlow() {
+    const code = await dialogs.prompt({
+      title: 'Add a pack',
+      body: 'Enter the pack code you were given. A pasted link with the code in it works too.',
+      label: 'Pack code',
+      placeholder: 'amber-otter-42',
+      confirmLabel: 'Add pack'
+    });
+    if (code) await packs.addCode(code);
+  }
 
   onMount(() => {
     packs.init().then(() => {
@@ -22,15 +43,6 @@
       e.preventDefault();
       settingsOpen = true;
     }
-  }
-
-  async function saveManifest() {
-    const url = manifestDraft.trim();
-    if (!url) return;
-    savingManifest = true;
-    const ok = await packs.setManifestUrl(url);
-    savingManifest = false;
-    if (ok) for (const p of packs.packs) void packs.check(p.id);
   }
 
   async function refresh() {
@@ -54,7 +66,10 @@
       <span class="sub">Shared packs</span>
     </div>
     <span class="spacer"></span>
-    <button class="btn" disabled={packs.loadingPacks || packs.syncingId !== null} onclick={refresh} title="Reload the pack list and check for updates">
+    <button class="btn btn-primary" onclick={addCodeFlow} title="Add a pack by its code">
+      <Icon name="plus" size={14} /> Add pack
+    </button>
+    <button class="btn" disabled={packs.loadingPacks || packs.syncingId !== null} onclick={refresh} title="Reload your packs and check for updates">
       <Icon name="refresh" size={14} class={packs.loadingPacks ? 'spin' : ''} /> Refresh
     </button>
     <button class="btn" onclick={() => packs.openLauncher()} title="Open the Minecraft launcher">
@@ -74,17 +89,18 @@
     {:else if packs.needsManifest}
       <section class="setup">
         <span class="mark" aria-hidden="true"><Icon name="minecraft" size={26} strokeWidth={1.5} /></span>
-        <h2>Where are your packs?</h2>
+        <h2>Add your first pack</h2>
         <p>
-          Paste the pack list address you were given. Whoever runs the packs shares it; keep it to your
-          group.
+          Enter the pack code you were given by whoever runs it. Pasting a link that contains the code
+          works too.
         </p>
-        <form class="row" onsubmit={(e) => { e.preventDefault(); saveManifest(); }}>
-          <input class="input mono" placeholder="https://…/manifest.json" bind:value={manifestDraft} spellcheck="false" autocomplete="off" />
-          <button class="btn btn-primary" type="submit" disabled={!manifestDraft.trim() || savingManifest}>
-            {savingManifest ? 'Loading…' : 'Continue'}
+        <form class="row" onsubmit={(e) => { e.preventDefault(); addCodeFromCard(); }}>
+          <input class="input mono" placeholder="amber-otter-42" bind:value={codeDraft} spellcheck="false" autocomplete="off" />
+          <button class="btn btn-primary" type="submit" disabled={!codeDraft.trim() || addingCode}>
+            {addingCode ? 'Looking up…' : 'Add pack'}
           </button>
         </form>
+        <p class="alt">Have a pack list URL instead? <button class="linkish" onclick={() => (settingsOpen = true)}>Set it in Settings</button>.</p>
       </section>
     {:else if packs.listError}
       <section class="setup">
@@ -110,7 +126,7 @@
         </div>
       {/if}
       {#if packs.packs.length === 0}
-        <div class="center"><Icon name="folder" size={24} /><span>The pack list is empty.</span></div>
+        <div class="center"><Icon name="folder" size={24} /><span>No packs yet. Use Add pack to enter a code.</span></div>
       {:else}
         <div class="grid">
           {#each packs.packs as pack (pack.id)}
@@ -234,6 +250,22 @@
   .row .input {
     flex: 1;
     min-width: 0;
+  }
+  .alt {
+    margin-top: 14px;
+    font-size: 12px;
+    color: var(--text-faint);
+  }
+  .linkish {
+    padding: 0;
+    font: inherit;
+    color: var(--accent);
+    background: none;
+    border: none;
+    cursor: pointer;
+  }
+  .linkish:hover {
+    text-decoration: underline;
   }
   .notice {
     display: flex;

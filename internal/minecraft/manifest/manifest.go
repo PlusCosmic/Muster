@@ -71,46 +71,54 @@ func Parse(data []byte) (Manifest, error) {
 		return Manifest{}, fmt.Errorf("manifest: %w", err)
 	}
 	seen := map[string]bool{}
-	for i, p := range m.Packs {
-		if p.LegacyJava != nil {
-			if p.Recommended.MaxMemoryMb == 0 && p.Recommended.MinMemoryMb == 0 && len(p.Recommended.Args) == 0 {
-				p.Recommended = *p.LegacyJava
-			}
-			p.LegacyJava = nil
-			m.Packs[i] = p
+	for i := range m.Packs {
+		if err := ValidatePack(&m.Packs[i]); err != nil {
+			return Manifest{}, fmt.Errorf("manifest: pack %d: %w", i, err)
 		}
-		if !idRe.MatchString(p.ID) {
-			return Manifest{}, fmt.Errorf("manifest: pack %d has bad id %q", i, p.ID)
+		if seen[m.Packs[i].ID] {
+			return Manifest{}, fmt.Errorf("manifest: duplicate pack id %q", m.Packs[i].ID)
 		}
-		if seen[p.ID] {
-			return Manifest{}, fmt.Errorf("manifest: duplicate pack id %q", p.ID)
-		}
-		seen[p.ID] = true
-		if p.Name == "" {
-			return Manifest{}, fmt.Errorf("manifest: pack %q has no name", p.ID)
-		}
-		if u, err := url.Parse(p.PackURL); err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" {
-			return Manifest{}, fmt.Errorf("manifest: pack %q has bad pack url %q", p.ID, p.PackURL)
-		}
-		if p.Recommended.MaxMemoryMb != 0 && p.Recommended.MinMemoryMb > p.Recommended.MaxMemoryMb {
-			return Manifest{}, fmt.Errorf("manifest: pack %q has minMemoryMb > maxMemoryMb", p.ID)
-		}
-		for _, a := range p.Recommended.Args {
-			// The launcher stores JVM options as one space-separated string and
-			// splits it on whitespace with no quoting, so an argument containing
-			// whitespace cannot be represented; refuse rather than mangle it.
-			if a == "" || strings.ContainsAny(a, " \t\n") {
-				return Manifest{}, fmt.Errorf("manifest: pack %q has a java arg with whitespace: %q", p.ID, a)
-			}
-		}
-		if p.Recommended.Args == nil {
-			m.Packs[i].Recommended.Args = []string{}
-		}
+		seen[m.Packs[i].ID] = true
 	}
 	if m.Packs == nil {
 		m.Packs = []Pack{}
 	}
 	return m, nil
+}
+
+// ValidatePack checks one pack entry and normalises it in place: the legacy
+// `java` key folds into Recommended, and a nil args list becomes empty.
+func ValidatePack(p *Pack) error {
+	if p.LegacyJava != nil {
+		if p.Recommended.MaxMemoryMb == 0 && p.Recommended.MinMemoryMb == 0 && len(p.Recommended.Args) == 0 {
+			p.Recommended = *p.LegacyJava
+		}
+		p.LegacyJava = nil
+	}
+	if !idRe.MatchString(p.ID) {
+		return fmt.Errorf("bad id %q", p.ID)
+	}
+	if p.Name == "" {
+		return fmt.Errorf("pack %q has no name", p.ID)
+	}
+	if u, err := url.Parse(p.PackURL); err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" {
+		return fmt.Errorf("pack %q has bad pack url %q", p.ID, p.PackURL)
+	}
+	if p.Recommended.MaxMemoryMb != 0 && p.Recommended.MinMemoryMb > p.Recommended.MaxMemoryMb {
+		return fmt.Errorf("pack %q has minMemoryMb > maxMemoryMb", p.ID)
+	}
+	for _, a := range p.Recommended.Args {
+		// The launcher stores JVM options as one space-separated string and
+		// splits it on whitespace with no quoting, so an argument containing
+		// whitespace cannot be represented; refuse rather than mangle it.
+		if a == "" || strings.ContainsAny(a, " \t\n") {
+			return fmt.Errorf("pack %q has a java arg with whitespace: %q", p.ID, a)
+		}
+	}
+	if p.Recommended.Args == nil {
+		p.Recommended.Args = []string{}
+	}
+	return nil
 }
 
 // Fetch downloads and parses the manifest at url.

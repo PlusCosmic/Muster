@@ -12,6 +12,7 @@ import (
 	"muster/internal/appdir"
 	"muster/internal/minecraft/launcher"
 	"muster/internal/minecraft/models"
+	"muster/internal/minecraft/registry"
 )
 
 func blankToNil(v *string) *string {
@@ -28,7 +29,11 @@ func blankToNil(v *string) *string {
 // normalizeSettings trims every override and drops the blank ones.
 func normalizeSettings(s models.Settings) models.Settings {
 	s.ManifestURL = blankToNil(s.ManifestURL)
+	s.RegistryURLOverride = blankToNil(s.RegistryURLOverride)
 	s.MinecraftDirOverride = blankToNil(s.MinecraftDirOverride)
+	if s.Codes == nil {
+		s.Codes = []models.PackCode{}
+	}
 	if s.Packs == nil {
 		s.Packs = map[string]models.LaunchSettings{}
 	}
@@ -76,6 +81,14 @@ func manifestURL(s models.Settings) string {
 		return *s.ManifestURL
 	}
 	return ""
+}
+
+// registryURL is the effective pack registry.
+func registryURL(s models.Settings) string {
+	if s.RegistryURLOverride != nil {
+		return *s.RegistryURLOverride
+	}
+	return registry.DefaultURL
 }
 
 // minecraftDir is the effective `.minecraft` directory, or "".

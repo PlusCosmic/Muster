@@ -3,6 +3,7 @@
   import { openExternal, revealPath } from '$lib/shell/api';
   import { relativeTime } from '$lib/shell/format';
   import { toastError } from '$lib/shell/stores/toasts.svelte';
+  import { dialogs } from '$lib/shell/stores/dialogs.svelte';
   import { packs } from '$lib/minecraft/stores/packs.svelte';
   import type { Pack } from '$lib/minecraft/types';
   import LaunchSettings from './LaunchSettings.svelte';
@@ -58,6 +59,17 @@
   });
 
   const gb = (mb: number) => (mb / 1024).toFixed(1).replace(/\.0$/, '');
+  async function remove() {
+    if (!pack.code) return;
+    const ok = await dialogs.confirm({
+      title: `Remove ${pack.name}?`,
+      body: 'The pack disappears from this list. Its files and its entry in the Minecraft launcher are left in place; you can add the code again any time.',
+      confirmLabel: 'Remove',
+      danger: true
+    });
+    if (ok) await packs.removeCode(pack.code);
+  }
+
   const memory = $derived(`${gb(pack.launch.maxMemoryMb)} GB RAM${pack.launchCustomised ? '' : ' (recommended)'}`);
 </script>
 
@@ -68,6 +80,7 @@
       <div class="meta">
         {#if pack.server}<span class="pill"><Icon name="link" size={11} /> {pack.server}</span>{/if}
         <button class="pill clickable" title="Launch settings" onclick={() => (launchOpen = !launchOpen)}>{memory}</button>
+        {#if pack.code}<span class="pill muted mono" title="Pack code">{pack.code}</span>{/if}
         {#if pack.installed && pack.syncedAtMs}
           <span class="pill muted" title="Last synced">synced {relativeTime(pack.syncedAtMs, 'a while ago')}</span>
         {/if}
@@ -136,6 +149,11 @@
     <button class="btn btn-ghost btn-icon" title="Check for updates" disabled={checking || syncing} onclick={() => packs.check(pack.id)}>
       <Icon name="refresh" size={15} class={checking ? 'spin' : ''} />
     </button>
+    {#if pack.code}
+      <button class="btn btn-ghost btn-icon" title="Remove this pack from the list" disabled={syncing} onclick={remove}>
+        <Icon name="trash" size={15} />
+      </button>
+    {/if}
   </footer>
 </article>
 

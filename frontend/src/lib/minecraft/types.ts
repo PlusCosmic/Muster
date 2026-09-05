@@ -5,7 +5,8 @@ import type * as m from '$bindings/muster/internal/minecraft/models/models';
 
 type Lists<T> = { [K in keyof T]: T[K] extends (infer U)[] | null ? U[] : T[K] };
 
-export type Settings = Omit<m.Settings, 'packs'> & { packs: Record<string, LaunchSettings> };
+export type PackCode = m.PackCode;
+export type Settings = Omit<Lists<m.Settings>, 'packs' | 'codes'> & { packs: Record<string, LaunchSettings>; codes: PackCode[] };
 export type Detected = m.Detected;
 export type LaunchSettings = Lists<m.LaunchSettings>;
 export type Pack = Omit<Lists<m.Pack>, 'launch'> & { launch: LaunchSettings };
