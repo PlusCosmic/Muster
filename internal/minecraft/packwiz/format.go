@@ -124,14 +124,35 @@ func (m Metafile) ForClient() bool {
 	return m.Side == "" || m.Side == "both" || m.Side == "client"
 }
 
+// SafeRelPath reports whether p is a slash-separated path that stays inside
+// the directory it is relative to: no absolute paths, no `..` segments, no
+// backslashes, no empty segments.
+func SafeRelPath(p string) bool {
+	if p == "" || strings.HasPrefix(p, "/") || strings.Contains(p, "\\") {
+		return false
+	}
+	for _, seg := range strings.Split(p, "/") {
+		if seg == "" || seg == "." || seg == ".." {
+			return false
+		}
+	}
+	return true
+}
+
 // ParsePack, ParseIndex and ParseMetafile decode the three layers.
 func ParsePack(data []byte) (Pack, error) {
 	var p Pack
 	if err := toml.Unmarshal(data, &p); err != nil {
 		return Pack{}, fmt.Errorf("pack.toml: %w", err)
 	}
-	if p.Index.File == "" {
-		return Pack{}, fmt.Errorf("pack.toml: no [index] file")
+	if !SafeRelPath(p.Index.File) {
+		return Pack{}, fmt.Errorf("pack.toml: bad [index] file %q", p.Index.File)
+	}
+	if p.Index.Hash == "" || p.Index.HashFormat == "" {
+		return Pack{}, fmt.Errorf("pack.toml: [index] has no hash")
+	}
+	if p.Versions["minecraft"] == "" {
+		return Pack{}, fmt.Errorf("pack.toml: [versions] has no minecraft version")
 	}
 	return p, nil
 }
@@ -142,7 +163,7 @@ func ParseIndex(data []byte) (Index, error) {
 		return Index{}, fmt.Errorf("index.toml: %w", err)
 	}
 	for _, f := range i.Files {
-		if strings.HasPrefix(f.File, "/") || strings.Contains(f.File, "..") || strings.Contains(f.File, "\\") {
+		if !SafeRelPath(f.File) {
 			return Index{}, fmt.Errorf("index.toml: refusing path %q", f.File)
 		}
 	}
@@ -154,7 +175,7 @@ func ParseMetafile(data []byte) (Metafile, error) {
 	if err := toml.Unmarshal(data, &m); err != nil {
 		return Metafile{}, fmt.Errorf("metafile: %w", err)
 	}
-	if m.Filename == "" || strings.ContainsAny(m.Filename, `/\`) {
+	if m.Filename == "" || m.Filename == "." || m.Filename == ".." || strings.ContainsAny(m.Filename, `/\`) {
 		return Metafile{}, fmt.Errorf("metafile %q: bad filename %q", m.Name, m.Filename)
 	}
 	return m, nil

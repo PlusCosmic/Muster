@@ -120,10 +120,12 @@ func (d *document) write(path string) error {
 }
 
 // Upsert writes profile under ProfileKey(packID) in every profiles file the
-// launcher keeps in dir, preserving everything else in those files. An
-// existing entry keeps its `created` timestamp; `lastUsed` is set to now so the
-// launcher preselects it. The launcher itself should be closed: it saves the
-// file on exit and would overwrite this.
+// launcher keeps in dir, preserving everything else in those files. Only the
+// fields Muster owns are written; anything else the launcher or the user has
+// put on the profile (a resolution, a custom javaDir, …) is kept. An existing
+// entry keeps its `created` timestamp; `lastUsed` is set to now so the
+// launcher preselects it. The launcher itself only reads this file on start,
+// so it must be restarted to notice a new entry.
 func Upsert(dir, packID string, profile Profile) error {
 	key := ProfileKey(packID)
 	if profile.Type == "" {
@@ -136,19 +138,30 @@ func Upsert(dir, packID string, profile Profile) error {
 		if err != nil {
 			return err
 		}
-		p := profile
+		merged := map[string]json.RawMessage{}
 		if old, ok := d.profiles[key]; ok {
-			var prev struct {
-				Created string `json:"created"`
-			}
-			if json.Unmarshal(old, &prev) == nil && prev.Created != "" {
-				p.Created = prev.Created
+			if err := json.Unmarshal(old, &merged); err != nil {
+				merged = map[string]json.RawMessage{}
 			}
 		}
-		if p.Created == "" {
+		p := profile
+		if c, ok := merged["created"]; ok && len(c) > 2 {
+			p.Created = "" // keep the recorded one
+		} else {
 			p.Created = p.LastUsed
 		}
-		raw, err := json.Marshal(p)
+		ours, err := json.Marshal(p)
+		if err != nil {
+			return err
+		}
+		var fields map[string]json.RawMessage
+		if err := json.Unmarshal(ours, &fields); err != nil {
+			return err
+		}
+		for k, v := range fields {
+			merged[k] = v
+		}
+		raw, err := json.Marshal(merged)
 		if err != nil {
 			return err
 		}
@@ -164,36 +177,48 @@ func Upsert(dir, packID string, profile Profile) error {
 func Remove(dir, packID string) error { return RemoveKeys(dir, []string{ProfileKey(packID)}) }
 
 // RemoveKeys deletes the given profile keys (any owner) from every profiles
-// file in dir. Used to undo the entries loader installers inject.
+// file in dir.
 func RemoveKeys(dir string, keys []string) error {
-	if len(keys) == 0 {
-		return nil
-	}
 	for _, name := range profilesFiles(dir) {
-		path := filepath.Join(dir, name)
-		if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
-			continue
-		}
-		d, err := readDocument(path)
-		if err != nil {
+		if err := RemoveKeysFrom(dir, name, keys); err != nil {
 			return err
-		}
-		changed := false
-		for _, key := range keys {
-			if _, ok := d.profiles[key]; ok {
-				delete(d.profiles, key)
-				changed = true
-			}
-		}
-		if !changed {
-			continue
-		}
-		if err := d.write(path); err != nil {
-			return fmt.Errorf("write %s: %w", name, err)
 		}
 	}
 	return nil
 }
+
+// RemoveKeysFrom deletes the given profile keys from one profiles file in dir.
+// Used to undo the entries loader installers inject, file by file.
+func RemoveKeysFrom(dir, name string, keys []string) error {
+	if len(keys) == 0 {
+		return nil
+	}
+	path := filepath.Join(dir, name)
+	if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	d, err := readDocument(path)
+	if err != nil {
+		return err
+	}
+	changed := false
+	for _, key := range keys {
+		if _, ok := d.profiles[key]; ok {
+			delete(d.profiles, key)
+			changed = true
+		}
+	}
+	if !changed {
+		return nil
+	}
+	if err := d.write(path); err != nil {
+		return fmt.Errorf("write %s: %w", name, err)
+	}
+	return nil
+}
+
+// ProfilesFiles is the main profiles file plus the Store variant when it exists.
+func ProfilesFiles(dir string) []string { return profilesFiles(dir) }
 
 // Get reads our profile for packID from the main profiles file, if present.
 func Get(dir, packID string) (Profile, bool, error) {

@@ -53,6 +53,21 @@ func TestFabricWritesMetaProfile(t *testing.T) {
 	}
 }
 
+func TestFabricRefusesProfileWithoutID(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte(`{}`)) }))
+	defer srv.Close()
+	old := FabricMeta
+	FabricMeta = srv.URL + "/%s/%s"
+	defer func() { FabricMeta = old }()
+	mc := t.TempDir()
+	if _, err := (&Installer{}).Ensure(context.Background(), mc, "1.21.1", "fabric", "0.16.9", t.TempDir(), nil, nil); err == nil {
+		t.Fatal("an id-less profile must be refused")
+	}
+	if launcher.HasVersion(mc, "fabric-loader-0.16.9-1.21.1") {
+		t.Fatal("nothing should have been written")
+	}
+}
+
 func TestNeoForgeRunsInstallerAndCleansInjectedProfile(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasSuffix(r.URL.Path, "neoforge-21.1.248-installer.jar") {
@@ -67,6 +82,11 @@ func TestNeoForgeRunsInstallerAndCleansInjectedProfile(t *testing.T) {
 	defer func() { NeoForgeJar = old }()
 
 	mc := t.TempDir()
+	// A Store-variant profiles file that already holds a NeoForge profile of
+	// its own: the cleanup must not take it for the installer's injection.
+	if err := os.WriteFile(filepath.Join(mc, launcher.StoreProfilesFile), []byte(`{"profiles":{"NeoForge":{"name":"mine","type":"custom","lastVersionId":"x"}},"version":3}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	// The user already has a profile; the installer must not disturb it.
 	if err := launcher.Upsert(mc, "frontier", launcher.Profile{Name: "Pack", LastVersionID: "neoforge-21.1.248"}); err != nil {
 		t.Fatal(err)
@@ -111,6 +131,10 @@ func TestNeoForgeRunsInstallerAndCleansInjectedProfile(t *testing.T) {
 	}
 	if _, ok, _ := launcher.Get(mc, "frontier"); !ok {
 		t.Fatal("our profile must survive")
+	}
+	store, _ := os.ReadFile(filepath.Join(mc, launcher.StoreProfilesFile))
+	if !strings.Contains(string(store), `"NeoForge"`) {
+		t.Fatalf("pre-existing NeoForge profile in the Store file must survive: %s", store)
 	}
 	if entries, _ := os.ReadDir(work); len(entries) != 0 {
 		t.Fatalf("installer jar should be cleaned up, left %v", entries)

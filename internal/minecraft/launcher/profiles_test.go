@@ -11,7 +11,7 @@ import (
 const existing = `{
   "profiles": {
     "abc123": {"name": "Latest release", "type": "latest-release", "lastVersionId": "latest-release", "created": "2025-01-01T00:00:00.000Z", "lastUsed": "2025-06-01T00:00:00.000Z", "icon": "Grass"},
-    "muster-frontier": {"name": "Old", "type": "custom", "lastVersionId": "neoforge-21.1.100", "created": "2025-03-03T00:00:00.000Z"}
+    "muster-frontier": {"name": "Old", "type": "custom", "lastVersionId": "neoforge-21.1.100", "created": "2025-03-03T00:00:00.000Z", "resolution": {"width": 1920, "height": 1080}, "javaDir": "C:\\\\my\\\\java.exe"}
   },
   "settings": {"crashAssistance": true, "enableSnapshots": false},
   "version": 3,
@@ -55,8 +55,11 @@ func TestUpsertMergesWithoutClobbering(t *testing.T) {
 	if ours["lastUsed"] == nil || !strings.HasSuffix(ours["lastUsed"].(string), "Z") {
 		t.Fatalf("lastUsed should be set: %v", ours["lastUsed"])
 	}
-	if _, ok := ours["javaDir"]; ok {
-		t.Fatal("empty javaDir should be omitted")
+	if ours["javaDir"] != `C:\\my\\java.exe` {
+		t.Fatalf("user's javaDir should survive: %v", ours["javaDir"])
+	}
+	if res, ok := ours["resolution"].(map[string]any); !ok || res["width"] != float64(1920) {
+		t.Fatalf("launcher-managed resolution should survive: %v", ours["resolution"])
 	}
 
 	got, ok, err := Get(dir, "frontier")

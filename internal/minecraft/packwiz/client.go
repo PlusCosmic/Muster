@@ -2,10 +2,14 @@ package packwiz
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"path"
+	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -86,6 +90,18 @@ func (c *Client) Load(ctx context.Context, packURL string) (*Resolved, error) {
 	}
 
 	res := &Resolved{Pack: pack, BaseURL: base}
+	seen := map[string]string{}
+	add := func(e Entry, from string) error {
+		if e.Path == StateFile || e.Path == StateFile+".tmp" {
+			return fmt.Errorf("%s: %q is reserved for Muster's own state", from, e.Path)
+		}
+		if other, dup := seen[e.Path]; dup {
+			return fmt.Errorf("%s and %s both install %q", other, from, e.Path)
+		}
+		seen[e.Path] = from
+		res.Entries = append(res.Entries, e)
+		return nil
+	}
 	for _, f := range index.Files {
 		format := f.HashFormat
 		if format == "" {
@@ -93,14 +109,16 @@ func (c *Client) Load(ctx context.Context, packURL string) (*Resolved, error) {
 		}
 		rel := indexDir + f.File
 		if !f.Metafile {
-			res.Entries = append(res.Entries, Entry{
+			if err := add(Entry{
 				Path:       rel,
 				Name:       rel,
 				URL:        join(base, rel),
 				HashFormat: format,
 				Hash:       f.Hash,
 				Preserve:   f.Preserve,
-			})
+			}, rel); err != nil {
+				return nil, err
+			}
 			continue
 		}
 		raw, err := c.get(ctx, join(base, rel))
@@ -122,7 +140,60 @@ func (c *Client) Load(ctx context.Context, packURL string) (*Resolved, error) {
 			return nil, err
 		}
 		e.Preserve = f.Preserve
-		res.Entries = append(res.Entries, e)
+		if err := add(e, rel); err != nil {
+			return nil, err
+		}
 	}
 	return res, nil
+}
+
+// download streams a URL into a temp file beside dest while hashing it, and
+// renames it into place only if the hash matches. Nothing is held in memory,
+// so a multi-gigabyte resource pack costs no more than a small jar. Returns
+// the byte count.
+func (c *Client) download(ctx context.Context, e Entry, dest string) (int64, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, e.URL, nil)
+	if err != nil {
+		return 0, err
+	}
+	if c.UserAgent != "" {
+		req.Header.Set("User-Agent", c.UserAgent)
+	}
+	resp, err := c.http().Do(req)
+	if err != nil {
+		return 0, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode/100 != 2 {
+		return 0, &StatusError{URL: e.URL, Status: resp.StatusCode}
+	}
+	h, err := NewHash(e.HashFormat)
+	if err != nil {
+		return 0, err
+	}
+	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
+		return 0, err
+	}
+	tmp := dest + ".tmp"
+	f, err := os.Create(tmp)
+	if err != nil {
+		return 0, err
+	}
+	n, err := io.Copy(io.MultiWriter(f, h), resp.Body)
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	if err != nil {
+		_ = os.Remove(tmp)
+		return 0, err
+	}
+	if got := hex.EncodeToString(h.Sum(nil)); !strings.EqualFold(got, e.Hash) {
+		_ = os.Remove(tmp)
+		return 0, fmt.Errorf("%s mismatch: want %s, got %s", e.HashFormat, e.Hash, got)
+	}
+	if err := os.Rename(tmp, dest); err != nil {
+		_ = os.Remove(tmp)
+		return 0, err
+	}
+	return n, nil
 }
