@@ -80,8 +80,22 @@ OutFile "..\..\..\bin\${INFO_PROJECTNAME}-${ARCH}-installer.exe" # Name of the i
 !endif
 ShowInstDetails show # This will always show the installation details.
 
+# Muster replaces RimForge. Its installer registered under a different
+# uninstall key and installed to a different directory, so without this an
+# upgrade would leave both apps installed and the old one able to recreate the
+# data directory Muster has just migrated. Run RimForge's own uninstaller
+# silently, from whichever scope it was installed in, before installing.
+!macro wails.removeLegacyProduct ROOT
+    ReadRegStr $0 ${ROOT} "Software\Microsoft\Windows\CurrentVersion\Uninstall\PlusCosmicRimForge" "QuietUninstallString"
+    ${If} $0 != ""
+        ExecWait '$0 _?=$INSTDIR'
+    ${EndIf}
+!macroend
+
 Function .onInit
    !insertmacro wails.checkArchitecture
+   !insertmacro wails.removeLegacyProduct HKCU
+   !insertmacro wails.removeLegacyProduct HKLM
 FunctionEnd
 
 Section

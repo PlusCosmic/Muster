@@ -120,6 +120,29 @@ func TestMigrateLegacyInPlaceResumesWhenOnlyMarkersRemain(t *testing.T) {
 	}
 }
 
+func TestMigrateLegacyInPlaceMigratesSettingsOnlyRoot(t *testing.T) {
+	base := t.TempDir()
+	// Path overrides saved, rules cached, but no profile ever created.
+	root := seedLegacy(t, base, "settings.json", "cache/communityRules.json")
+	t.Setenv(EnvDataDir, "")
+	t.Setenv(EnvLegacyDataDir, root)
+	if moved, err := MigrateLegacy(); err != nil || !moved {
+		t.Fatalf("%v, %v", moved, err)
+	}
+	for _, f := range []string{"settings.json", "cache/communityRules.json"} {
+		if _, err := os.Stat(filepath.Join(root, "rimworld", f)); err != nil {
+			t.Fatalf("%s: %v", f, err)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(root, "settings.json")); !os.IsNotExist(err) {
+		t.Fatalf("settings.json should have moved: %v", err)
+	}
+	// And a second run, with Muster's layout now present, is a no-op.
+	if moved, err := MigrateLegacy(); err != nil || moved {
+		t.Fatalf("second run: %v, %v", moved, err)
+	}
+}
+
 func TestMigrateLegacyInPlaceRefusesConflicts(t *testing.T) {
 	base := t.TempDir()
 	root := seedLegacy(t, base, "registry.json", "rimworld/registry.json")
