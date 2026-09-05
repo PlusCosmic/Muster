@@ -28,11 +28,18 @@ export function CheckForUpdates(): $CancellablePromise<boolean> {
 }
 
 /**
- * GetAppInfo reports the running version, where the app keeps its data, and
- * whether it can update itself.
+ * GetAppInfo reports the running version, where the app keeps its data,
+ * whether it can update itself, and which game modules already have data.
  */
 export function GetAppInfo(): $CancellablePromise<models$0.AppInfo> {
     return $Call.ByID(713661858);
+}
+
+/**
+ * GetSettings reads the app's own settings: which game modules are on.
+ */
+export function GetSettings(): $CancellablePromise<models$0.AppSettings> {
+    return $Call.ByID(2554697378);
 }
 
 /**
@@ -40,4 +47,12 @@ export function GetAppInfo(): $CancellablePromise<models$0.AppInfo> {
  */
 export function RevealPath(path: string): $CancellablePromise<void> {
     return $Call.ByID(77851903, path);
+}
+
+/**
+ * UpdateSettings persists the app's own settings and echoes back what was
+ * stored (unknown game ids dropped, the rest in rail order).
+ */
+export function UpdateSettings(s: models$0.AppSettings): $CancellablePromise<models$0.AppSettings> {
+    return $Call.ByID(2894041249, s);
 }

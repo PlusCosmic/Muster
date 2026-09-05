@@ -16,6 +16,20 @@ type AppInfo struct {
 	// SelfUpdates: this build checks for and installs its own updates
 	// (Windows/macOS release builds). The Arch package updates through pacman.
 	SelfUpdates bool `json:"selfUpdates"`
+	// GamesWithData lists the game modules that already have data under the
+	// data root (ids as in AppSettings.Games). The welcome screen preselects
+	// them, so an upgrade from a build that showed every game never hides
+	// one the user was using.
+	GamesWithData []string `json:"gamesWithData"`
+}
+
+// AppSettings is the app's own settings.json: what the shell needs before any
+// game module is involved.
+type AppSettings struct {
+	// Games is the game modules the user has switched on, in rail order
+	// ("rimworld", "minecraft"). Empty means the user has not been through
+	// the welcome screen yet.
+	Games []string `json:"games"`
 }
 
 // Str returns a pointer to s, or nil when s is empty.

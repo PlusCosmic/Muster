@@ -2,7 +2,7 @@
 // beneath it:
 //
 //	<data>/muster/
-//	  settings.json        # common settings (none yet)
+//	  settings.json        # the app's own settings (internal/settings)
 //	  rimworld/            # everything the RimWorld game module owns
 //	  minecraft/           # everything the Minecraft game module owns
 //
@@ -98,6 +98,23 @@ func rootFromLegacyEnv() bool {
 
 // GameRoot is `<data>/muster/<game>` — root of everything one game module owns.
 func GameRoot(game Game) string { return filepath.Join(DataRoot(), string(game)) }
+
+// Games is every game module, in rail order.
+var Games = []Game{RimWorld, Minecraft}
+
+// GamesInUse reports the game modules whose root holds anything at all: a
+// module that has been opened before, whatever it wrote there. The shell
+// uses it to preselect games on the welcome screen.
+func GamesInUse() []Game {
+	used := []Game{}
+	for _, g := range Games {
+		entries, err := os.ReadDir(GameRoot(g))
+		if err == nil && len(entries) > 0 {
+			used = append(used, g)
+		}
+	}
+	return used
+}
 
 // legacyRoot is the RimForge data directory that MigrateLegacy adopts: the
 // sibling of the data root named `rimforge`. Deriving it from DataRoot rather

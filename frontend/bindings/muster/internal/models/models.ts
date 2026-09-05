@@ -13,4 +13,25 @@ export interface AppInfo {
      * (Windows/macOS release builds). The Arch package updates through pacman.
      */
     "selfUpdates": boolean;
+
+    /**
+     * GamesWithData lists the game modules that already have data under the
+     * data root (ids as in AppSettings.Games). The welcome screen preselects
+     * them, so an upgrade from a build that showed every game never hides
+     * one the user was using.
+     */
+    "gamesWithData": string[] | null;
+}
+
+/**
+ * AppSettings is the app's own settings.json: what the shell needs before any
+ * game module is involved.
+ */
+export interface AppSettings {
+    /**
+     * Games is the game modules the user has switched on, in rail order
+     * ("rimworld", "minecraft"). Empty means the user has not been through
+     * the welcome screen yet.
+     */
+    "games": string[] | null;
 }
