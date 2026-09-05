@@ -5,8 +5,14 @@
   import { toastError } from '$lib/shell/stores/toasts.svelte';
   import { packs } from '$lib/minecraft/stores/packs.svelte';
   import type { Pack } from '$lib/minecraft/types';
+  import LaunchSettings from './LaunchSettings.svelte';
 
   let { pack }: { pack: Pack } = $props();
+
+  // Shown by default before the first install, so the memory choice is
+  // made consciously rather than discovered later.
+  // svelte-ignore state_referenced_locally
+  let launchOpen = $state(!pack.installed);
 
   const check = $derived(packs.checks[pack.id] ?? null);
   const checking = $derived(!!packs.checking[pack.id]);
@@ -51,7 +57,8 @@
     return progress.current;
   });
 
-  const memory = $derived(pack.maxMemoryMb ? `${(pack.maxMemoryMb / 1024).toFixed(pack.maxMemoryMb % 1024 ? 1 : 0)} GB RAM` : null);
+  const gb = (mb: number) => (mb / 1024).toFixed(1).replace(/\.0$/, '');
+  const memory = $derived(`${gb(pack.launch.maxMemoryMb)} GB RAM${pack.launchCustomised ? '' : ' (recommended)'}`);
 </script>
 
 <article class="card" class:syncing>
@@ -60,7 +67,7 @@
       <h2>{pack.name}</h2>
       <div class="meta">
         {#if pack.server}<span class="pill"><Icon name="link" size={11} /> {pack.server}</span>{/if}
-        {#if memory}<span class="pill">{memory}</span>{/if}
+        <button class="pill clickable" title="Launch settings" onclick={() => (launchOpen = !launchOpen)}>{memory}</button>
         {#if pack.installed && pack.syncedAtMs}
           <span class="pill muted" title="Last synced">synced {relativeTime(pack.syncedAtMs, 'a while ago')}</span>
         {/if}
@@ -82,6 +89,10 @@
       {#if status.kind === 'ok'}<span class="dot"></span>{:else if status.kind === 'warn'}<Icon name="alert" size={12} />{/if}
       {status.text}
     </p>
+  {/if}
+
+  {#if launchOpen && !syncing}
+    <LaunchSettings {pack} onclose={() => (launchOpen = false)} />
   {/if}
 
   {#if report && report.manual.length > 0 && !syncing}
@@ -119,6 +130,9 @@
         <Icon name="folder" size={15} />
       </button>
     {/if}
+    <button class="btn btn-ghost btn-icon" title="Launch settings" class:active={launchOpen} onclick={() => (launchOpen = !launchOpen)}>
+      <Icon name="gear" size={15} />
+    </button>
     <button class="btn btn-ghost btn-icon" title="Check for updates" disabled={checking || syncing} onclick={() => packs.check(pack.id)}>
       <Icon name="refresh" size={15} class={checking ? 'spin' : ''} />
     </button>
@@ -160,6 +174,16 @@
     color: var(--text-muted);
     background: var(--bg-raised);
     border-radius: 999px;
+  }
+  .pill.clickable {
+    cursor: pointer;
+    border: none;
+    font: inherit;
+    font-size: 11px;
+  }
+  .pill.clickable:hover {
+    color: var(--text);
+    background: var(--bg-hover);
   }
   .pill.muted {
     color: var(--text-faint);

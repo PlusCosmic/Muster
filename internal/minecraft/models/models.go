@@ -9,6 +9,24 @@ type Settings struct {
 	ManifestURL *string `json:"manifestUrl"`
 	// MinecraftDirOverride replaces the detected `.minecraft` directory.
 	MinecraftDirOverride *string `json:"minecraftDirOverride"`
+	// Packs holds each pack's launch settings, by pack id, once the user has
+	// touched them. Absent ⇒ derived from the pack's recommendation and this
+	// machine's memory (see LaunchSettings).
+	Packs map[string]LaunchSettings `json:"packs"`
+}
+
+// LaunchSettings is how a pack is launched on this machine. A pack only
+// recommends; these are what the launcher profile actually gets.
+type LaunchSettings struct {
+	// MaxMemoryMb is the Java heap (-Xmx). Clamped to Detected.maxHeapMb.
+	MaxMemoryMb int `json:"maxMemoryMb"`
+	// MinMemoryMb is -Xms when set; nil lets the JVM start small and grow.
+	MinMemoryMb *int `json:"minMemoryMb"`
+	// Args are the extra JVM options.
+	Args []string `json:"args"`
+	// FollowRecommendedArgs: Args track the pack's recommendation as it
+	// changes. Editing them pins them (false).
+	FollowRecommendedArgs bool `json:"followRecommendedArgs"`
 }
 
 // Detected is what the module found on this machine.
@@ -21,20 +39,31 @@ type Detected struct {
 	LauncherInstalled bool `json:"launcherInstalled"`
 	// PacksDir is where packs are installed.
 	PacksDir string `json:"packsDir"`
+	// TotalMemoryMb is this machine's physical memory; 0 if unknown.
+	TotalMemoryMb int `json:"totalMemoryMb"`
+	// MaxHeapMb is the largest heap the memory slider offers (about three
+	// quarters of TotalMemoryMb); 0 if unknown.
+	MaxHeapMb int `json:"maxHeapMb"`
 }
 
 // Pack is a manifest entry plus what is installed locally. Everything from
 // the manifest is present even when nothing is installed.
 type Pack struct {
-	ID          string   `json:"id"`
-	Name        string   `json:"name"`
-	Description string   `json:"description"`
-	Icon        *string  `json:"icon"`
-	PackURL     string   `json:"packUrl"`
-	Server      *string  `json:"server"`
-	MinMemoryMb int      `json:"minMemoryMb"`
-	MaxMemoryMb int      `json:"maxMemoryMb"`
-	JavaArgs    []string `json:"javaArgs"`
+	ID          string  `json:"id"`
+	Name        string  `json:"name"`
+	Description string  `json:"description"`
+	Icon        *string `json:"icon"`
+	PackURL     string  `json:"packUrl"`
+	Server      *string `json:"server"`
+	// What the pack's author recommends; advisory.
+	RecommendedMinMemoryMb int      `json:"recommendedMinMemoryMb"`
+	RecommendedMaxMemoryMb int      `json:"recommendedMaxMemoryMb"`
+	RecommendedArgs        []string `json:"recommendedArgs"`
+	// Launch is what this machine will actually use: the saved settings, or
+	// the recommendation fitted to this machine when nothing is saved yet.
+	Launch LaunchSettings `json:"launch"`
+	// LaunchCustomised: the user has saved launch settings for this pack.
+	LaunchCustomised bool `json:"launchCustomised"`
 
 	InstallDir       string  `json:"installDir"`
 	Installed        bool    `json:"installed"`

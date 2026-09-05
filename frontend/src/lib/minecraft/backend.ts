@@ -20,6 +20,9 @@ export const checkPack = wrap('checkPack');
 export const syncPack = wrap('syncPack');
 export const openLauncher = wrap('openLauncher');
 export const launcherRunning = wrap('launcherRunning');
+export const getLaunchSettings = wrap('getLaunchSettings');
+export const setLaunchSettings = wrap('setLaunchSettings');
+export const resetLaunchSettings = wrap('resetLaunchSettings');
 
 /** Subscription: the unsubscribe resolves once the implementation is loaded. */
 export function onSyncProgress(cb: (p: import('./types').SyncProgress) => void): () => void {
