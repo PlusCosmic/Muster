@@ -16,6 +16,14 @@ import { Call as $Call, CancellablePromise as $CancellablePromise } from "@wails
 import * as models$0 from "./models/models.js";
 
 /**
+ * AddPackCode resolves a code against the registry, remembers it, and returns
+ * the pack. Entering a code already present just refreshes it.
+ */
+export function AddPackCode(input: string): $CancellablePromise<models$0.Pack> {
+    return $Call.ByID(1503478745, input);
+}
+
+/**
  * CheckPack loads the pack and reports what a sync would do, without doing it.
  */
 export function CheckPack(id: string): $CancellablePromise<models$0.PackCheck> {
@@ -23,7 +31,7 @@ export function CheckPack(id: string): $CancellablePromise<models$0.PackCheck> {
 }
 
 /**
- * Detect reports the effective manifest URL, launcher location and memory.
+ * Detect reports the configured sources, launcher location and memory.
  */
 export function Detect(): $CancellablePromise<models$0.Detected> {
     return $Call.ByID(1425364701);
@@ -50,7 +58,8 @@ export function LauncherRunning(): $CancellablePromise<boolean> {
 }
 
 /**
- * ListPacks fetches the manifest and pairs each entry with its local state.
+ * ListPacks lists every pack from the user's codes and pack list, each paired
+ * with its local state.
  */
 export function ListPacks(): $CancellablePromise<models$0.Pack[] | null> {
     return $Call.ByID(2281387124);
@@ -61,6 +70,14 @@ export function ListPacks(): $CancellablePromise<models$0.Pack[] | null> {
  */
 export function OpenLauncher(): $CancellablePromise<void> {
     return $Call.ByID(2445975174);
+}
+
+/**
+ * RemovePackCode forgets a code. Installed files and the launcher profile are
+ * left alone; the pack simply stops being listed.
+ */
+export function RemovePackCode(code: string): $CancellablePromise<void> {
+    return $Call.ByID(2257320678, code);
 }
 
 /**

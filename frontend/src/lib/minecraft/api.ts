@@ -15,6 +15,8 @@ export const listPacks = (): Promise<Pack[]> => Svc.ListPacks().then((p) => (p ?
 export const checkPack = (id: string): Promise<PackCheck> => Svc.CheckPack(id);
 export const syncPack = (id: string): Promise<SyncReport> => Svc.SyncPack(id) as Promise<SyncReport>;
 export const openLauncher = (): Promise<void> => Svc.OpenLauncher();
+export const addPackCode = (input: string): Promise<Pack> => Svc.AddPackCode(input) as Promise<Pack>;
+export const removePackCode = (code: string): Promise<void> => Svc.RemovePackCode(code);
 export const getLaunchSettings = (id: string): Promise<LaunchSettings> =>
   Svc.GetLaunchSettings(id) as Promise<LaunchSettings>;
 export const setLaunchSettings = (id: string, ls: LaunchSettings): Promise<LaunchSettings> =>

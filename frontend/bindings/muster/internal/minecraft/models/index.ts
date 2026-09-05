@@ -7,6 +7,7 @@ export type {
     Manual,
     Pack,
     PackCheck,
+    PackCode,
     Settings,
     SyncReport
 } from "./models.js";
