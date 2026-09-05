@@ -148,6 +148,9 @@ Each game's `frontend/src/lib/<game>/types.ts` narrows the generated
 | `ListPacks` | — | `Pack[]` | manifest entries + local install state; network: manifest only |
 | `CheckPack` | `id` | `PackCheck` | loads the pack, plans a sync, reports counts; writes nothing |
 | `SyncPack` | `id` | `SyncReport` | download/delete to match the pack, install the loader if the launcher lacks it, then write the launcher profile; emits `minecraft:sync` (`SyncProgress`) per file and per loader step |
+| `GetLaunchSettings` | `id` | `LaunchSettings` | what the pack launches with on this machine |
+| `SetLaunchSettings` | `id, settings: LaunchSettings` | `LaunchSettings` | save (clamped to this machine) and rewrite the launcher profile if it exists |
+| `ResetLaunchSettings` | `id` | `LaunchSettings` | forget the user's settings; back to the recommendation fitted to this machine |
 | `OpenLauncher` | — | — | start the official launcher |
 | `LauncherRunning` | — | `bool` | is it already open (a profile written since only shows after a restart) |
 
@@ -180,11 +183,13 @@ RulesDbStatus   { cached: bool, fetchedAtMs?, ruleCount }
 Minecraft (`internal/minecraft/models/models.go`):
 
 ```
-Settings        { manifestUrl?, minecraftDirOverride? }
-Detected        { manifestUrl?, minecraftDir?, launcherInstalled, packsDir }
-Pack            { id, name, description, icon?, packUrl, server?, minMemoryMb, maxMemoryMb,
-                  javaArgs: string[], installDir, installed, installedVersion?, syncedAtMs?,
-                  profileWritten }
+Settings        { manifestUrl?, minecraftDirOverride?, packs: { [id]: LaunchSettings } }
+LaunchSettings  { maxMemoryMb, minMemoryMb?, args: string[], followRecommendedArgs }
+Detected        { manifestUrl?, minecraftDir?, launcherInstalled, packsDir, totalMemoryMb, maxHeapMb }
+Pack            { id, name, description, icon?, packUrl, server?,
+                  recommendedMinMemoryMb, recommendedMaxMemoryMb, recommendedArgs: string[],
+                  launch: LaunchSettings, launchCustomised,
+                  installDir, installed, installedVersion?, syncedAtMs?, profileWritten }
 PackCheck       { id, latestVersion, minecraft, loader, loaderVersion, versionId,
                   loaderInstalled, toDownload, toDelete, upToDate }
 SyncProgress    { id, phase: "files"|"loader"|"profile", done, total, current }   (event payload)
@@ -304,7 +309,7 @@ One JSON document at a URL the pack author controls:
     "name": "Frontier",
     "description": "…", "icon": "https://…",  // optional
     "pack": "https://…/<slug>/pack.toml",     // the packwiz pack
-    "java": { "minMemoryMb": 4096, "maxMemoryMb": 8192, "args": ["-XX:+UseZGC"] },
+    "recommended": { "minMemoryMb": 4096, "maxMemoryMb": 8192, "args": ["-XX:+UseZGC"] },
     "server": "play.example.com"              // optional
 } ] }
 ```
@@ -315,6 +320,9 @@ pastes the URL of the list they were given (first-run card or Settings), and
 it is stored in the module's `settings.json`. Nothing in this repository or
 in any build names a pack; that keeps the app usable by anyone with a
 packwiz pack to share, and keeps a private pack's URL out of a public repo.
+
+`recommended` is advice, not configuration (the older key `java` is still
+read as the same thing): see "Launch settings" below.
 
 ### Sync
 
@@ -377,14 +385,30 @@ Temurin 21 JRE from the Adoptium API into `java/jre-21/`.
 
 ### Launcher profile
 
+### Launch settings
+
+Every machine differs, so a pack's `recommended` heap and JVM args are shown
+and offered, never imposed. `internal/minecraft/machine` reads the machine's
+physical memory (`/proc/meminfo`, `GlobalMemoryStatusEx`, `sysctl
+hw.memsize`) and offers at most three quarters of it (`Detected.maxHeapMb`,
+on 512 MB steps, floor 1 GB). With nothing saved, a pack launches with its
+recommended maximum clamped to that, no `-Xms`, and the recommended args
+(`Pack.launch`, `launchCustomised = false`). The user can move the heap
+slider, reserve the heap up front (`minMemoryMb = maxMemoryMb`), and edit
+the args; saved settings live in `settings.json` under `packs.<id>` and
+`followRecommendedArgs` keeps args tracking the pack until first edited.
+`SetLaunchSettings` also rewrites the launcher profile's `javaArgs` when a
+profile exists, so a change applies on the next launch without a sync. Args
+containing whitespace are refused everywhere, since the launcher splits its
+string without quoting.
+
 `SyncPack` then upserts `profiles["muster-<id>"]` in
 `.minecraft/launcher_profiles.json` (and the Store variant when present) with
 `gameDir = packs/<id>`, `lastVersionId` = the loader's installation id
 (`neoforge-<v>`, `fabric-loader-<v>-<mc>`, `<mc>-forge-<v>`; validated before
-any file moves), `javaArgs` from the manifest's memory and args (the launcher
-splits that string on whitespace with no quoting, so the manifest rejects
-args containing whitespace), and `lastUsed = now` so the launcher preselects
-it. Writes are read-merge-write over raw JSON: every other profile and
+any file moves), `javaArgs` rendered from the effective launch settings
+(`-Xms` only when reserved, `-Xmx`, then the args), and `lastUsed = now` so
+the launcher preselects it. Writes are read-merge-write over raw JSON: every other profile and
 top-level key is preserved byte for byte, and on our own profile only the
 fields Muster owns are written, so a resolution or javaDir the user set in
 the launcher survives a sync. On Linux the Flatpak launcher's
@@ -413,7 +437,7 @@ already exists, i.e. whether a sync would need to install it.
 - **RimWorld backend**: `internal/rimworld/{paths,settings,profiles,launch,mods}`.
 - **RimWorld frontend**: `frontend/src/lib/rimworld/` (except `types.ts`,
   `api.ts`) and `frontend/src/routes/rimworld/`.
-- **Minecraft backend**: `internal/minecraft/{manifest,packwiz,launcher,loader,java}`
+- **Minecraft backend**: `internal/minecraft/{manifest,packwiz,launcher,loader,java,machine}`
   and the non-service files in `internal/minecraft/`.
 - **Minecraft frontend**: `frontend/src/lib/minecraft/` (except `types.ts`,
   `api.ts`) and `frontend/src/routes/minecraft/`.

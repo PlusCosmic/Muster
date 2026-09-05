@@ -3,6 +3,7 @@
 
 export type {
     Detected,
+    LaunchSettings,
     Manual,
     Pack,
     PackCheck,

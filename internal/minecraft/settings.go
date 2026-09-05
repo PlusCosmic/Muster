@@ -29,6 +29,15 @@ func blankToNil(v *string) *string {
 func normalizeSettings(s models.Settings) models.Settings {
 	s.ManifestURL = blankToNil(s.ManifestURL)
 	s.MinecraftDirOverride = blankToNil(s.MinecraftDirOverride)
+	if s.Packs == nil {
+		s.Packs = map[string]models.LaunchSettings{}
+	}
+	for id, ls := range s.Packs {
+		if ls.Args == nil {
+			ls.Args = []string{}
+		}
+		s.Packs[id] = ls
+	}
 	return s
 }
 

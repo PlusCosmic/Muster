@@ -1,8 +1,22 @@
 // DEV-ONLY fixture backend for the Minecraft module. Gated by MOCK_ENABLED.
-import type { Detected, Pack, PackCheck, Settings, SyncProgress, SyncReport } from './types';
+import type { Detected, LaunchSettings, Pack, PackCheck, Settings, SyncProgress, SyncReport } from './types';
 
 const HOUR = 3_600_000;
-let settings: Settings = { manifestUrl: 'https://packs.example.com/manifest.json', minecraftDirOverride: null };
+let settings: Settings = { manifestUrl: 'https://packs.example.com/manifest.json', minecraftDirOverride: null, packs: {} };
+const TOTAL_MB = 16384;
+const MAX_HEAP = 12288;
+const recommended: Record<string, { min: number; max: number; args: string[] }> = {
+  frontier: { min: 4096, max: 8192, args: ['-XX:+UseZGC', '-XX:+ZGenerational'] },
+  skyblock: { min: 0, max: 4096, args: [] }
+};
+function launchFor(id: string): { launch: LaunchSettings; customised: boolean } {
+  const rec = recommended[id];
+  const saved = settings.packs[id];
+  if (!saved) {
+    return { launch: { maxMemoryMb: Math.min(rec.max || 4096, MAX_HEAP), minMemoryMb: null, args: [...rec.args], followRecommendedArgs: true }, customised: false };
+  }
+  return { launch: { ...saved, args: saved.followRecommendedArgs ? [...rec.args] : saved.args }, customised: true };
+}
 const listeners = new Set<(p: SyncProgress) => void>();
 const emit = (p: SyncProgress) => listeners.forEach((l) => l(p));
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -20,9 +34,11 @@ const packs = (): Pack[] => [
     icon: null,
     packUrl: 'https://packs.example.com/pack.toml',
     server: 'play.example.com',
-    minMemoryMb: 4096,
-    maxMemoryMb: 8192,
-    javaArgs: ['-XX:+UseZGC'],
+    recommendedMinMemoryMb: 4096,
+    recommendedMaxMemoryMb: 8192,
+    recommendedArgs: recommended.frontier.args,
+    launch: launchFor('frontier').launch,
+    launchCustomised: launchFor('frontier').customised,
     installDir: '/home/you/.local/share/muster/minecraft/packs/frontier',
     installed: state.frontier.installed,
     installedVersion: state.frontier.version,
@@ -36,9 +52,11 @@ const packs = (): Pack[] => [
     icon: null,
     packUrl: 'https://packs.example.com/skyblock/pack.toml',
     server: null,
-    minMemoryMb: 0,
-    maxMemoryMb: 4096,
-    javaArgs: [],
+    recommendedMinMemoryMb: 0,
+    recommendedMaxMemoryMb: 4096,
+    recommendedArgs: [],
+    launch: launchFor('skyblock').launch,
+    launchCustomised: launchFor('skyblock').customised,
     installDir: '/home/you/.local/share/muster/minecraft/packs/skyblock',
     installed: state.skyblock.installed,
     installedVersion: state.skyblock.version,
@@ -57,7 +75,9 @@ export const mockApi = {
     manifestUrl: settings.manifestUrl,
     minecraftDir: settings.minecraftDirOverride ?? '/home/you/.minecraft',
     launcherInstalled: true,
-    packsDir: '/home/you/.local/share/muster/minecraft/packs'
+    packsDir: '/home/you/.local/share/muster/minecraft/packs',
+    totalMemoryMb: TOTAL_MB,
+    maxHeapMb: MAX_HEAP
   }),
   listPacks: async (): Promise<Pack[]> => {
     await sleep(300);
@@ -111,6 +131,18 @@ export const mockApi = {
   },
   openLauncher: async (): Promise<void> => {},
   launcherRunning: async (): Promise<boolean> => false,
+  getLaunchSettings: async (id: string): Promise<LaunchSettings> => launchFor(id).launch,
+  setLaunchSettings: async (id: string, ls: LaunchSettings): Promise<LaunchSettings> => {
+    if (ls.args.some((a) => /\s/.test(a) || a === '')) throw new Error(`JVM argument contains whitespace, which the Minecraft launcher cannot pass on`);
+    const max = Math.max(1024, Math.min(MAX_HEAP, ls.maxMemoryMb - (ls.maxMemoryMb % 512)));
+    settings.packs = { ...settings.packs, [id]: { ...ls, maxMemoryMb: max } };
+    return launchFor(id).launch;
+  },
+  resetLaunchSettings: async (id: string): Promise<LaunchSettings> => {
+    const { [id]: _drop, ...rest } = settings.packs;
+    settings.packs = rest;
+    return launchFor(id).launch;
+  },
   onSyncProgress: (cb: (p: SyncProgress) => void): (() => void) => {
     listeners.add(cb);
     return () => listeners.delete(cb);
