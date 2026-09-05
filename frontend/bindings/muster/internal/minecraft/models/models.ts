@@ -91,10 +91,10 @@ export interface PackCheck {
  */
 export interface Settings {
     /**
-     * ManifestURLOverride replaces the built-in manifest URL (which is baked in
-     * at build time and may be empty).
+     * ManifestURL is the pack list the user was given. Muster ships with none:
+     * the app knows nothing about any particular pack.
      */
-    "manifestUrlOverride": string | null;
+    "manifestUrl": string | null;
 
     /**
      * MinecraftDirOverride replaces the detected `.minecraft` directory.

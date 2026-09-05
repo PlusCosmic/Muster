@@ -5,6 +5,7 @@
   import { absoluteTime, relativeTime } from '$lib/shell/format';
   import { MOCK_ENABLED } from '$lib/shell/mock';
   import type { Settings } from '$lib/rimworld/types';
+  import AboutSection from '$lib/shell/components/AboutSection.svelte';
   import AppearanceFields from '$lib/shell/components/AppearanceFields.svelte';
   import Icon from '$lib/shell/components/Icon.svelte';
   import Modal from '$lib/shell/components/Modal.svelte';
@@ -206,6 +207,11 @@
         {refreshing ? 'Fetching…' : 'Refresh now'}
       </button>
     </div>
+  </section>
+
+  <section class="group">
+    <h3>About Muster</h3>
+    <AboutSection />
   </section>
 
   {#if MOCK_ENABLED}

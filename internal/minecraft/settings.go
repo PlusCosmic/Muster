@@ -27,7 +27,7 @@ func blankToNil(v *string) *string {
 
 // normalizeSettings trims every override and drops the blank ones.
 func normalizeSettings(s models.Settings) models.Settings {
-	s.ManifestURLOverride = blankToNil(s.ManifestURLOverride)
+	s.ManifestURL = blankToNil(s.ManifestURL)
 	s.MinecraftDirOverride = blankToNil(s.MinecraftDirOverride)
 	return s
 }
@@ -61,12 +61,12 @@ func saveSettings(s models.Settings) error {
 	return appdir.WriteFileAtomic(SettingsPath(), data)
 }
 
-// manifestURL is the effective manifest URL, or "".
+// manifestURL is the configured manifest URL, or "".
 func manifestURL(s models.Settings) string {
-	if s.ManifestURLOverride != nil {
-		return *s.ManifestURLOverride
+	if s.ManifestURL != nil {
+		return *s.ManifestURL
 	}
-	return DefaultManifestURL
+	return ""
 }
 
 // minecraftDir is the effective `.minecraft` directory, or "".

@@ -54,6 +54,33 @@ hand-maintained counter, so each build is an upgrade to pacman even when the
 should recognise as a release; `frontend/package.json` tracks it but is not
 what the dispatch reads.
 
+## Windows
+
+The same workflow's `windows` job publishes a GitHub release, once per
+version: when `v<version>` (from `build/config.yml`) does not exist yet, it
+cross-compiles `muster.exe` from Linux (`CGO_ENABLED=0 GOOS=windows`), builds
+the per-user NSIS installer (no UAC; `%LOCALAPPDATA%\Programs\Muster`) with
+`makensis` from `build/windows/nsis`, zips the bare exe as the updater
+artifact, signs a Wails update manifest with the `MUSTER_UPDATER_KEY` secret
+(`wails3 updater manifest -channel stable`, artifact URLs on the release's
+permanent download path), verifies it against `build/updater.pub`, and
+creates the release with all three attached:
+
+```
+Muster-installer.exe                # first install
+muster-<version>-windows-amd64.zip  # what the updater downloads
+stable.json                         # the signed manifest the app polls
+```
+
+The app polls `releases/latest/download/stable.json`, so publishing a release
+is what makes every Windows install offer the update. A merge that does not
+bump the version publishes nothing here. Nothing about any particular pack is
+in a build: users paste their pack list URL into the app.
+
+The exe is unsigned, so SmartScreen shows "unknown publisher" on the first
+install. Rotating the signing key means shipping a build with the new public
+key first: an app pinned to the old key rejects manifests signed by the new.
+
 ## Versioning
 
 `build/config.yml` (`info.version`) is the version of record. Keep
