@@ -12,8 +12,10 @@ plus one **game module** per game:
   `Scenarios/`. Installed mods (Steam Workshop + game `Mods/` + official
   Core/DLC) are shared between profiles; only the *active list* and settings
   differ.
-- **Minecraft** (not built yet): shared modpacks pulled from a manifest and set
-  up as profiles in the official Minecraft launcher.
+- **Minecraft**: shared packwiz modpacks pulled from a *manifest*, installed
+  into their own directories, and offered to the official Minecraft launcher
+  as profiles. The launcher does auth, Java, assets and the actual launch; we
+  do the pack.
 
 Muster is the renamed and widened successor of RimForge, which was RimWorld
 only. Nothing in the RimWorld module changed in the rename beyond where its
@@ -65,7 +67,12 @@ is unset, and the directory it names is migrated in place.
     settings.json             # RimWorld Settings (path overrides)
     cache/communityRules.json # cached RimSort community rules DB
     cache/rules_meta.json     # { fetchedAtMs, etag? }
-  minecraft/                  # Minecraft game root (reserved)
+  minecraft/                  # Minecraft game root (internal/minecraft)
+    settings.json             # manifest + .minecraft overrides
+    packs/<id>/               # one install per pack = its launcher profile's gameDir
+      muster-pack.json        # what the last sync put there (packwiz.StateFile)
+    java/jre-21/              # Temurin JRE, only when no usable Java was found
+    work/                     # loader installer downloads and logs
 ```
 
 Slugs are derived from the display name: lowercase, `[a-z0-9-]`, collisions
@@ -130,6 +137,18 @@ Each game's `frontend/src/lib/<game>/types.ts` narrows the generated
 | `RefreshRulesDb` | — | `RulesDbStatus` | force re-fetch |
 | `GetRulesDbStatus` | — | `RulesDbStatus` | cache state only, no network |
 
+### Minecraft service (`internal/minecraft/service.go`)
+
+| Method | Args | Returns | Notes |
+|---|---|---|---|
+| `GetSettings` | — | `Settings` | |
+| `UpdateSettings` | `settings: Settings` | `Settings` | persists overrides |
+| `Detect` | — | `Detected` | effective manifest URL, `.minecraft`, launcher presence |
+| `ListPacks` | — | `Pack[]` | manifest entries + local install state; network: manifest only |
+| `CheckPack` | `id` | `PackCheck` | loads the pack, plans a sync, reports counts; writes nothing |
+| `SyncPack` | `id` | `SyncReport` | download/delete to match the pack, install the loader if the launcher lacks it, then write the launcher profile; emits `minecraft:sync` (`SyncProgress`) per file and per loader step |
+| `OpenLauncher` | — | — | start the official launcher |
+
 ## Shared types
 
 App (`internal/models/models.go`):
@@ -154,6 +173,22 @@ ActiveModList   { activeIds: string[], knownExpansions: string[], version? }
 SortWarning     { kind, packageId?, message }                (kind is a plain string)
 SortResult      { sorted: string[], warnings: SortWarning[] }
 RulesDbStatus   { cached: bool, fetchedAtMs?, ruleCount }
+```
+
+Minecraft (`internal/minecraft/models/models.go`):
+
+```
+Settings        { manifestUrlOverride?, minecraftDirOverride? }
+Detected        { manifestUrl?, minecraftDir?, launcherInstalled, packsDir }
+Pack            { id, name, description, icon?, packUrl, server?, minMemoryMb, maxMemoryMb,
+                  javaArgs: string[], installDir, installed, installedVersion?, syncedAtMs?,
+                  profileWritten }
+PackCheck       { id, latestVersion, minecraft, loader, loaderVersion, versionId,
+                  loaderInstalled, toDownload, toDelete, upToDate }
+SyncProgress    { id, phase: "files"|"loader"|"profile", done, total, current }   (event payload)
+Manual          { path, name, url, why }
+SyncReport      { id, version, downloaded: string[], deleted: string[], manual: Manual[],
+                  profileWritten, loaderInstalled, versionId }
 ```
 
 ## RimWorld module
@@ -248,6 +283,95 @@ Input: the active id list. Output: sorted list + warnings. Pure — does not wri
    `versionMismatch` (mod's supportedVersions lacks the game's major.minor),
    `unknownMod` (active id not found among installed mods).
 
+## Minecraft module
+
+Go packages under `internal/minecraft/`: `manifest` (the pack list),
+`packwiz` (pack format, hashing, download resolution, sync planner/applier),
+`launcher` (`.minecraft` location, `launcher_profiles.json` merge-writes,
+opening the launcher), `loader` (installing a loader into the launcher),
+`java` (a runtime to run loader installers with), `models`, and the service,
+settings and layout in the package root.
+
+### Manifest
+
+One JSON document at a URL the pack author controls:
+
+```jsonc
+{ "packs": [ {
+    "id": "cobblemon",                        // [a-z0-9-], names packs/<id>
+    "name": "Cosmic's Cobblemon",
+    "description": "…", "icon": "https://…",  // optional
+    "pack": "https://…/<slug>/pack.toml",     // the packwiz pack
+    "java": { "minMemoryMb": 4096, "maxMemoryMb": 8192, "args": ["-XX:+UseZGC"] },
+    "server": "play.example.com"              // optional
+} ] }
+```
+
+Minecraft version and loader come from `pack.toml`, never from the manifest.
+The manifest URL is a private pack's privacy layer (as the pack URL's slug
+is), so the built-in default is injected at build time with
+`-ldflags "-X muster/internal/minecraft.DefaultManifestURL=…"` rather than
+committed; an empty default means the UI asks for one. The settings override
+always wins.
+
+### Sync
+
+`packwiz.Client.Load` reads `pack.toml` → `index.toml` (hash-verified against
+pack.toml) → every `.pw.toml` (hash-verified against the index), keeping only
+client-side files (`side` = both/client). Download URLs are the metafile's
+`[download] url`, or for `mode = "metadata:curseforge"` the CurseForge CDN
+pattern `edge.forgecdn.net/files/<id/1000>/<id%1000>/<filename>`; a
+CurseForge file the CDN refuses (403/404) is reported in `SyncReport.manual`
+rather than failing the sync. Every download is hash-verified before it lands.
+
+`MakePlan` diffs the resolved pack against `packs/<id>/muster-pack.json`, which
+records the path and hash of every file the last sync wrote: missing or
+changed ⇒ download; recorded but no longer in the pack ⇒ delete; anything the
+user added themselves is never touched. `preserve = true` files are not
+overwritten once installed. Optional files follow their pack default. `Apply`
+writes the state after every file, so an interrupted sync resumes exactly.
+
+### Loader install
+
+Between files and profile, `SyncPack` makes sure `.minecraft/versions/<id>/`
+exists for the pack's loader (`loader.Installer.Ensure`), and does nothing
+when it already does:
+
+- **Fabric / Quilt**: fetch the launcher profile JSON from
+  `meta.fabricmc.net` / `meta.quiltmc.org`
+  (`/versions/loader/<mc>/<loader>/profile/json`) and write it as
+  `versions/<id>/<id>.json`. The launcher fetches vanilla and the libraries
+  on first play. No Java needed.
+- **NeoForge / Forge**: download the installer jar from the loader's Maven
+  and run `java -jar <installer> --install-client <.minecraft>` (verified on
+  neoforge-21.1.248: headless, downloads vanilla itself, ~9 s). The installer
+  needs `launcher_profiles.json` to exist (created if not) and injects a
+  "NeoForge" profile, which is removed again so friends' dropdowns show only
+  packs. Logs land in `work/`.
+
+Java for the installer (`java.Ensure`), in order: the launcher's own bundled
+runtime — `<.minecraft>/runtime/<component>/<platform>/<component>/bin/java`
+for the standalone launcher, and on Windows the Store launcher's package cache
+`%LOCALAPPDATA%\Packages\Microsoft.4297127D64EC6_8wekyb3d8bbwe\LocalCache\Local\runtime`
+(verified on Store build 2.6.2); components are ranked alpha < beta < gamma <
+delta < epsilon…, newest first — then a JRE we downloaded before, then a
+`java` on PATH that is 17+, and last a Temurin 21 JRE from the Adoptium API
+into `java/jre-21/`.
+
+### Launcher profile
+
+`SyncPack` then upserts `profiles["muster-<id>"]` in
+`.minecraft/launcher_profiles.json` (and the Store variant when present) with
+`gameDir = packs/<id>`, `lastVersionId` = the loader's installation id
+(`neoforge-<v>`, `fabric-loader-<v>-<mc>`, `<mc>-forge-<v>`), `javaArgs`
+from the manifest's memory and args, and `lastUsed = now` so the launcher
+preselects it. Writes are read-merge-write over raw JSON: every other profile
+and top-level key is preserved byte for byte. The launcher must be closed
+while we write, since it saves the file on exit.
+
+`PackCheck.loaderInstalled` reports whether `.minecraft/versions/<versionId>/`
+already exists, i.e. whether a sync would need to install it.
+
 ## Module ownership (work streams — disjoint, do not edit outside your scope)
 
 - **Supervisor-owned** (agents must NOT edit): `docs/ARCHITECTURE.md`,
@@ -262,8 +386,10 @@ Input: the active id list. Output: sorted list + warnings. Pure — does not wri
 - **RimWorld backend**: `internal/rimworld/{paths,settings,profiles,launch,mods}`.
 - **RimWorld frontend**: `frontend/src/lib/rimworld/` (except `types.ts`,
   `api.ts`) and `frontend/src/routes/rimworld/`.
-- **Minecraft**: `internal/minecraft/`, `frontend/src/lib/minecraft/`,
-  `frontend/src/routes/minecraft/` (reserved).
+- **Minecraft backend**: `internal/minecraft/{manifest,packwiz,launcher,loader,java}`
+  and the non-service files in `internal/minecraft/`.
+- **Minecraft frontend**: `frontend/src/lib/minecraft/` (except `types.ts`,
+  `api.ts`) and `frontend/src/routes/minecraft/`.
 
 Definition of done: backend ⇒ `go vet -tags gtk3 ./...` clean, `gofmt -l .`
 empty, and unit tests for pure logic (`go test -tags gtk3 ./...`); frontend ⇒
