@@ -7,6 +7,9 @@ import (
 	"runtime"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
+
+	"muster/internal/appdir"
+	"muster/internal/rimworld"
 )
 
 // The SvelteKit static build (frontend/dist) is embedded into the binary.
@@ -26,12 +29,22 @@ func main() {
 		_ = os.Setenv("WEBKIT_DISABLE_DMABUF_RENDERER", "1")
 	}
 
+	// Adopt a RimForge (the RimWorld-only predecessor) data directory before
+	// anything reads from the data root. A failed migration is not fatal: the
+	// app starts empty and the old directory is left intact for a retry.
+	if moved, err := appdir.MigrateLegacy(); err != nil {
+		log.Printf("muster: legacy data migration failed: %v", err)
+	} else if moved {
+		log.Printf("muster: migrated RimForge data to %s", appdir.GameRoot(appdir.RimWorld))
+	}
+
 	app := application.New(application.Options{
-		Name:        "RimForge",
-		Description: "Profile and mod list manager for RimWorld",
+		Name:        "Muster",
+		Description: "Shared mod setups for RimWorld and Minecraft",
 		Icon:        appIcon,
 		Services: []application.Service{
 			application.NewService(&App{}),
+			application.NewService(&rimworld.Service{}),
 		},
 		Assets: application.AssetOptions{
 			Handler: application.AssetFileServerFS(assets),
@@ -40,13 +53,13 @@ func main() {
 			ApplicationShouldTerminateAfterLastWindowClosed: true,
 		},
 		Linux: application.LinuxOptions{
-			ProgramName: "rimforge",
+			ProgramName: "muster",
 		},
 	})
 
 	app.Window.NewWithOptions(application.WebviewWindowOptions{
 		Name:             "main",
-		Title:            "RimForge",
+		Title:            "Muster",
 		Width:            1200,
 		Height:           800,
 		MinWidth:         560,

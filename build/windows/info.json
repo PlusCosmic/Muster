@@ -6,10 +6,10 @@
 		"0000": {
 			"ProductVersion": "0.1.0",
 			"CompanyName": "PlusCosmic",
-			"FileDescription": "Profile and mod list manager for RimWorld",
+			"FileDescription": "Shared mod setups for RimWorld and Minecraft",
 			"LegalCopyright": "(c) 2026, Harry Leach",
-			"ProductName": "RimForge",
-			"Comments": "https://github.com/PlusCosmic/RimForge"
+			"ProductName": "Muster",
+			"Comments": "https://github.com/PlusCosmic/Muster"
 		}
 	}
 }
