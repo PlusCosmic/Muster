@@ -100,6 +100,26 @@ func TestMigrateLegacyInPlaceResumesAfterPartialMove(t *testing.T) {
 	}
 }
 
+func TestMigrateLegacyInPlaceResumesWhenOnlyMarkersRemain(t *testing.T) {
+	base := t.TempDir()
+	// A run that moved settings.json and cache/ and then died: the markers
+	// (registry, profiles) are still at the root, so the next run finishes.
+	root := seedLegacy(t, base, "registry.json", "profiles/a/x", "rimworld/settings.json", "rimworld/cache/communityRules.json")
+	t.Setenv(EnvDataDir, "")
+	t.Setenv(EnvLegacyDataDir, root)
+	if moved, err := MigrateLegacy(); err != nil || !moved {
+		t.Fatalf("%v, %v", moved, err)
+	}
+	for _, f := range []string{"registry.json", "profiles/a/x", "settings.json", "cache/communityRules.json"} {
+		if _, err := os.Stat(filepath.Join(root, "rimworld", f)); err != nil {
+			t.Fatalf("%s: %v", f, err)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(root, "registry.json")); !os.IsNotExist(err) {
+		t.Fatalf("registry should have moved: %v", err)
+	}
+}
+
 func TestMigrateLegacyInPlaceRefusesConflicts(t *testing.T) {
 	base := t.TempDir()
 	root := seedLegacy(t, base, "registry.json", "rimworld/registry.json")

@@ -149,11 +149,13 @@ func MigrateLegacy() (bool, error) {
 	return true, nil
 }
 
-// legacyEntries is everything RimForge ever wrote to its root. `settings.json`
-// is listed last and is not on its own a sign of RimForge data (see
-// hasRimForgeData), because Muster will keep its own common settings.json
-// at the root.
-var legacyEntries = []string{"registry.json", "profiles", "cache", "settings.json"}
+// legacyEntries is everything RimForge ever wrote to its root, in the order
+// migrateInPlace moves them. The two that count as evidence of RimForge data
+// (see hasRimForgeData) go last, so that a run which dies part-way always
+// leaves at least one of them behind and the next run resumes; once they are
+// gone, everything before them is gone too. `settings.json` alone is not
+// evidence, because Muster keeps its own common settings.json at the root.
+var legacyEntries = []string{"settings.json", "cache", "registry.json", "profiles"}
 
 // hasRimForgeData reports whether dir holds RimForge's registry or profiles —
 // the entries that mean there is something worth migrating.

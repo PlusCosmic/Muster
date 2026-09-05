@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 
 	core "muster/internal/models"
-	"muster/internal/rimworld/models"
 	"muster/internal/rimworld/paths"
 )
 
