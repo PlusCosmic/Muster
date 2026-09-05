@@ -50,7 +50,9 @@ last game used (localStorage `muster-game`). The rail
 
 All app data lives under `<data>/muster` (`internal/appdir`): `$XDG_DATA_HOME`
 or `~/.local/share` on Linux, `~/Library/Application Support` on macOS,
-`%APPDATA%` on Windows. `MUSTER_DATA_DIR` replaces the whole root.
+`%APPDATA%` on Windows. `MUSTER_DATA_DIR` replaces the whole root;
+`RIMFORGE_DATA_DIR` (the predecessor's override) is honoured when the new one
+is unset, and the directory it names is migrated in place.
 
 ```
 <data>/muster/
@@ -78,7 +80,9 @@ when the Muster root does not exist yet and the RimForge directory holds a
 registry, a settings file or a `profiles/` directory. Any other state is left
 untouched (both present, neither present, unrecognised directory). Registry
 records hold slugs only, never absolute paths, so nothing inside needs
-rewriting. Frontend preferences (`rimforge-theme`, `-sidebar`, `-titlebar` in
+rewriting. An installation that relocated its data with `RIMFORGE_DATA_DIR`
+keeps that directory as its root: its RimForge entries move into a new
+`rimworld/` subdirectory there instead. Frontend preferences (`rimforge-theme`, `-sidebar`, `-titlebar` in
 localStorage) are read as fallbacks for their `muster-*` keys.
 
 ## Command API (Wails services)
