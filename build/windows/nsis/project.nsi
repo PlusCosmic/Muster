@@ -87,9 +87,19 @@ ShowInstDetails show # This will always show the installation details.
 # data directory Muster has just migrated. Run RimForge's own uninstaller
 # silently, from whichever scope it was installed in, before installing.
 !macro wails.removeLegacyProduct ROOT
-    ReadRegStr $0 ${ROOT} "Software\Microsoft\Windows\CurrentVersion\Uninstall\PlusCosmicRimForge" "QuietUninstallString"
+    # The Wails installer writes its key in the 64-bit view (wails.writeUninstaller).
+    SetRegView 64
+    ReadRegStr $0 ${ROOT} "Software\Microsoft\Windows\CurrentVersion\Uninstall\PlusCosmicRimForge" "UninstallString"
     ${If} $0 != ""
-        ExecWait '$0 _?=$INSTDIR'
+        # $0 is "<dir>\uninstall.exe" in quotes. Strip them, take the directory,
+        # and run the uninstaller in place (_?=) so ExecWait really waits; it
+        # then cannot delete itself, so tidy that up afterwards.
+        StrCpy $1 $0 "" 1
+        StrCpy $1 $1 -1
+        ${GetParent} $1 $2
+        ExecWait '"$1" /S _?=$2'
+        Delete "$1"
+        RMDir "$2"
     ${EndIf}
 !macroend
 
