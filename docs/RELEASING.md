@@ -1,6 +1,6 @@
 # Releasing
 
-RimForge has one release channel: an Arch package published to a private pacman
+Muster has one release channel: an Arch package published to a private pacman
 repository on Backblaze B2. There is no in-app updater, no local promotion
 script, and no timer — a machine changes only when `pacman -Syu` runs.
 
@@ -34,12 +34,12 @@ The packaging repository builds from `git archive` of the dispatched SHA, so a
 package can only ever contain committed source — a dirty working tree is never
 packaged. It installs the bare binary (the frontend embedded, no AppImage or
 nfpm bundler), the hicolor icons, and
-`/usr/share/applications/dev.pluscosmic.rimforge.desktop`. The build it runs is
+`/usr/share/applications/dev.pluscosmic.muster.desktop`. The build it runs is
 the same one the workflow verifies:
 
 ```sh
 cd frontend && npm ci && npm run build && cd ..
-go build -tags gtk3,production -trimpath -buildvcs=false -ldflags="-w -s" -o rimforge .
+go build -tags gtk3,production -trimpath -buildvcs=false -ldflags="-w -s" -o muster .
 ```
 
 with `go`, `nodejs`, `npm`, `webkit2gtk-4.1` and `gtk3` as build dependencies
@@ -69,12 +69,12 @@ that URL is the only thing keeping the package repository unlisted. This
 repository is public, but the source is all rights reserved — see `LICENSE`.
 
 ```sh
-sudo pacman -Sy rimforge
+sudo pacman -Sy muster
 ```
 
-RimForge shells out to `steam` to launch the game and to detect the install and
+The RimWorld module shells out to `steam` to launch the game and to detect the install and
 Workshop paths, so Steam is an `optdepends` in name only — the app is not much
-use without it. `RIMFORGE_DATA_DIR` still overrides the data root for a packaged
+use without it. `MUSTER_DATA_DIR` still overrides the data root for a packaged
 build, the same as for a development one.
 
 ## Setup
@@ -101,7 +101,7 @@ access to the bucket can ship a package that runs as root on every client.
 without publishing:
 
 ```sh
-scripts/build-local.sh rimforge ~/Projects/RimForge
+scripts/build-local.sh muster ~/Projects/Muster
 ```
 
 [PlusCosmic/packages]: https://github.com/PlusCosmic/packages

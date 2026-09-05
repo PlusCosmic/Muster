@@ -1,4 +1,4 @@
-module rimforge
+module muster
 
 go 1.25.0
 

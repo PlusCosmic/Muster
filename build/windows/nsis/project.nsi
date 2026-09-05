@@ -33,6 +33,7 @@ Unicode true
 ####
 ## Include the wails tools
 ####
+!include "LogicLib.nsh"
 !include "wails_tools.nsh"
 
 # The version information for this two must consist of 4 parts
@@ -80,12 +81,39 @@ OutFile "..\..\..\bin\${INFO_PROJECTNAME}-${ARCH}-installer.exe" # Name of the i
 !endif
 ShowInstDetails show # This will always show the installation details.
 
+# Muster replaces RimForge. Its installer registered under a different
+# uninstall key and installed to a different directory, so without this an
+# upgrade would leave both apps installed and the old one able to recreate the
+# data directory Muster has just migrated. Run RimForge's own uninstaller
+# silently, from whichever scope it was installed in, as the first install step.
+!macro wails.removeLegacyProduct ROOT
+    # The Wails installer writes its key in the 64-bit view (wails.writeUninstaller).
+    SetRegView 64
+    ReadRegStr $0 ${ROOT} "Software\Microsoft\Windows\CurrentVersion\Uninstall\PlusCosmicRimForge" "UninstallString"
+    ${If} $0 != ""
+        # $0 is "<dir>\uninstall.exe" in quotes. Strip them, take the directory,
+        # and run the uninstaller in place (_?=) so ExecWait really waits; it
+        # then cannot delete itself, so tidy that up afterwards.
+        StrCpy $1 $0 "" 1
+        StrCpy $1 $1 -1
+        ${GetParent} $1 $2
+        ExecWait '"$1" /S _?=$2'
+        Delete "$1"
+        RMDir "$2"
+    ${EndIf}
+!macroend
+
 Function .onInit
    !insertmacro wails.checkArchitecture
 FunctionEnd
 
 Section
     !insertmacro wails.setShellContext
+
+    # Only once the user has committed to installing: cancelling from the
+    # welcome or directory page must leave RimForge as it was.
+    !insertmacro wails.removeLegacyProduct HKCU
+    !insertmacro wails.removeLegacyProduct HKLM
 
     !insertmacro wails.webview2runtime
 

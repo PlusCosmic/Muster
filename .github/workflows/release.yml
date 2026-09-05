@@ -66,8 +66,13 @@ jobs:
       - name: gofmt
         run: test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
       - run: go vet -tags gtk3 ./...
+      # The _windows.go and _darwin.go files never compile on this runner, so
+      # type-check them for their own platforms. Only the pure-Go internal
+      # packages: the Wails root package needs each platform's toolchain.
+      - run: GOOS=windows go vet ./internal/...
+      - run: GOOS=darwin go vet ./internal/...
       - run: go test -tags gtk3 ./...
-      - run: go build -tags gtk3,production -trimpath -buildvcs=false -ldflags="-w -s" -o bin/rimforge .
+      - run: go build -tags gtk3,production -trimpath -buildvcs=false -ldflags="-w -s" -o bin/muster .
 
   publish:
     needs: verify
@@ -113,10 +118,10 @@ jobs:
 
           gh api repos/PlusCosmic/packages/dispatches \
             -f event_type=publish \
-            -f "client_payload[package]=rimforge" \
+            -f "client_payload[package]=muster" \
             -f "client_payload[repository]=$GITHUB_REPOSITORY" \
             -f "client_payload[ref]=$GITHUB_SHA" \
             -f "client_payload[version]=$version"
 
-          echo "Dispatched rimforge $version at $GITHUB_SHA" \
+          echo "Dispatched muster $version at $GITHUB_SHA" \
             >> "$GITHUB_STEP_SUMMARY"
