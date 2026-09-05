@@ -1,4 +1,5 @@
 <script lang="ts">
+  import AboutSection from '$lib/shell/components/AboutSection.svelte';
   import AppearanceFields from '$lib/shell/components/AppearanceFields.svelte';
   import Icon from '$lib/shell/components/Icon.svelte';
   import Modal from '$lib/shell/components/Modal.svelte';
@@ -130,6 +131,11 @@
       <dt>Packs folder</dt>
       <dd class="mono" data-selectable>{d?.packsDir ?? '—'}</dd>
     </dl>
+  </section>
+
+  <section class="group">
+    <h3>About Muster</h3>
+    <AboutSection />
   </section>
 
   {#if MOCK_ENABLED}

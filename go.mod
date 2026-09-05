@@ -6,6 +6,8 @@ require github.com/wailsapp/wails/v3 v3.0.0-beta.16
 
 require github.com/BurntSushi/toml v1.6.0
 
+require golang.org/x/mod v0.40.0 // indirect
+
 require (
 	github.com/adrg/xdg v0.5.3 // indirect
 	github.com/coder/websocket v1.8.14 // indirect

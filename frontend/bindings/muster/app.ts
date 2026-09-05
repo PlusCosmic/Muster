@@ -18,7 +18,16 @@ import { Call as $Call, CancellablePromise as $CancellablePromise } from "@wails
 import * as models$0 from "./internal/models/models.js";
 
 /**
- * GetAppInfo reports the running version and where the app keeps its data.
+ * CheckForUpdates opens the update window, checks for a newer release and
+ * installs it if there is one. No-op when SelfUpdates is false.
+ */
+export function CheckForUpdates(): $CancellablePromise<void> {
+    return $Call.ByID(2675659504);
+}
+
+/**
+ * GetAppInfo reports the running version, where the app keeps its data, and
+ * whether it can update itself.
  */
 export function GetAppInfo(): $CancellablePromise<models$0.AppInfo> {
     return $Call.ByID(713661858);
