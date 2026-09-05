@@ -31,8 +31,13 @@
     menu: 'M4 7h16M4 12h16M4 17h16',
     spinner: 'M12 3a9 9 0 0 1 9 9',
     // Game marks for the rail.
-    rimworld: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM3.5 10.5c3 1.4 6 1.9 8.5 1.9s5.5-.5 8.5-1.9M12 3c-2.6 2.6-3.9 5.6-3.9 9s1.3 6.4 3.9 9c2.6-2.6 3.9-5.6 3.9-9S14.6 5.6 12 3z',
-    minecraft: 'M12 3 3.5 7.5v9L12 21l8.5-4.5v-9L12 3zM3.5 7.5 12 12l8.5-4.5M12 12v9',
+    // A ringed planet: the ring is one arc that ducks behind the planet, so
+    // the planet sits in front of its own rim.
+    rimworld: 'M12 18.1a5.7 5.7 0 1 0 0-11.4 5.7 5.7 0 0 0 0 11.4zM6.3 11.7A11.3 3.6 -28 1 0 14.6 7.3',
+    // A grass block: an isometric cube with the grass layer hanging down the
+    // side faces in uneven pixel steps.
+    minecraft:
+      'M12 3 3.5 7.5v9L12 21l8.5-4.5v-9L12 3zM3.5 7.5 12 12l8.5-4.5M12 12v9M3.5 10.2l3.8 2v2l4.7 2.5 3.4-1.8v-2l5.1-2.7',
     download: 'M12 4v11m0 0 4-4m-4 4-4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2',
     externalLink: 'M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5'
   } as const;
