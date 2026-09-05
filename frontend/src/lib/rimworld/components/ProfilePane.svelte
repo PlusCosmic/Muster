@@ -40,7 +40,7 @@
           </button>
           {#if app.dirty}
             <span class="dirty" title="These changes are not written to ModsConfig.xml yet">
-              Unsaved<span class="lbl"> changes</span>
+              Unsaved<span class="lbl">&nbsp;changes</span>
             </span>
           {/if}
         </div>
