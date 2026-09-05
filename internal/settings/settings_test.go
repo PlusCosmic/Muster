@@ -26,8 +26,22 @@ func TestNormalizeNeverYieldsNil(t *testing.T) {
 
 func TestMissingFileIsFirstRun(t *testing.T) {
 	t.Setenv("MUSTER_DATA_DIR", t.TempDir())
-	if got := Load(); len(got.Games) != 0 {
-		t.Fatalf("expected no games, got %v", got.Games)
+	if got, err := Load(); err != nil || len(got.Games) != 0 {
+		t.Fatalf("expected no games, got %v, %v", got.Games, err)
+	}
+}
+
+func TestUnreadableFileIsAnError(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root reads anything")
+	}
+	root := t.TempDir()
+	t.Setenv("MUSTER_DATA_DIR", root)
+	if err := os.WriteFile(filepath.Join(root, "settings.json"), []byte(`{"games":["rimworld"]}`), 0o000); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(); err == nil {
+		t.Fatal("expected an error for a file that exists but cannot be read")
 	}
 }
 
@@ -37,8 +51,8 @@ func TestMalformedFileIsFirstRun(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "settings.json"), []byte("{nope"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if got := Load(); len(got.Games) != 0 {
-		t.Fatalf("expected no games, got %v", got.Games)
+	if got, err := Load(); err != nil || len(got.Games) != 0 {
+		t.Fatalf("expected no games, got %v, %v", got.Games, err)
 	}
 }
 

@@ -3,7 +3,7 @@
   // editable later.
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
-  import { GAMES, lastGame, type GameId } from '../games';
+  import { GAMES, lastGame, rememberGame, type GameId } from '../games';
   import { modules } from '../stores/modules.svelte';
   import GamePicker from './GamePicker.svelte';
   import Modal from './Modal.svelte';
@@ -23,7 +23,11 @@
     onclose();
     // The game on screen may just have been switched off.
     const here = GAMES.find((g) => page.url.pathname.startsWith(g.path));
-    if (here && !modules.enabled.includes(here.id)) await goto(lastGame(modules.games).path);
+    if (here && !modules.enabled.includes(here.id)) {
+      const next = lastGame(modules.games);
+      rememberGame(next.id);
+      await goto(next.path);
+    }
   }
 </script>
 

@@ -7,32 +7,42 @@
   import BrandMark from '$lib/shell/components/BrandMark.svelte';
   import GamePicker from '$lib/shell/components/GamePicker.svelte';
   import Icon from '$lib/shell/components/Icon.svelte';
-  import { isGameId, lastGame, type GameId } from '$lib/shell/games';
+  import { GAMES, isGameId, lastGame, rememberGame, type GameId } from '$lib/shell/games';
   import { MOCK_ENABLED } from '$lib/shell/mock';
   import { modules } from '$lib/shell/stores/modules.svelte';
 
   let selected = $state<GameId[]>(modules.enabled);
   let saving = $state(false);
+  // Continue waits for the preselection below, so a quick click cannot save
+  // a choice that hides a game with data. Coming back to this screen keeps
+  // the current choice and needs no preload.
+  let ready = $state(modules.onboarded || MOCK_ENABLED);
 
   onMount(async () => {
-    // Coming back to this screen keeps the current choice. A first run
-    // starts from whatever already has data on disk: an upgrade from a build
-    // that showed every game must not hide one that was in use.
-    if (modules.onboarded || MOCK_ENABLED) return;
+    if (ready) return;
+    // A first run starts from whatever already has data on disk: an upgrade
+    // from a build that showed every game must not hide one that was in use.
+    // Merged with, not replacing, anything ticked while this was in flight.
     try {
       const info = await getAppInfo();
-      if (selected.length === 0) selected = info.gamesWithData.filter(isGameId);
+      const withData = info.gamesWithData.filter(isGameId);
+      selected = GAMES.map((g) => g.id).filter((id) => selected.includes(id) || withData.includes(id));
     } catch {
       // Nothing preselected, then; the user picks.
+    } finally {
+      ready = true;
     }
   });
 
   async function finish() {
-    if (selected.length === 0 || saving) return;
+    if (selected.length === 0 || saving || !ready) return;
     saving = true;
     const ok = await modules.set(selected);
     saving = false;
-    if (ok) await goto(lastGame(modules.games).path);
+    if (!ok) return;
+    const next = lastGame(modules.games);
+    rememberGame(next.id);
+    await goto(next.path);
   }
 </script>
 
@@ -55,7 +65,7 @@
       <span class="hint" aria-live="polite">
         {selected.length === 0 ? 'Pick at least one game to continue.' : ''}
       </span>
-      <button class="btn btn-primary" disabled={selected.length === 0 || saving} onclick={finish}>
+      <button class="btn btn-primary" disabled={selected.length === 0 || saving || !ready} onclick={finish}>
         {saving ? 'Saving…' : 'Continue'}
         {#if !saving}<Icon name="chevronRight" size={14} />{/if}
       </button>
