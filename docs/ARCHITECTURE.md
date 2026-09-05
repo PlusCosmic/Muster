@@ -114,7 +114,8 @@ Each game's `frontend/src/lib/<game>/types.ts` narrows the generated
 | Method | Args | Returns | Notes |
 |---|---|---|---|
 | `RevealPath` | `path` | — | show in system file manager (`Env.OpenFileManager`) |
-| `GetAppInfo` | — | `AppInfo` | `{ version, dataRoot }` |
+| `GetAppInfo` | — | `AppInfo` | `{ version, dataRoot, selfUpdates }` |
+| `CheckForUpdates` | — | — | open the update window and install a newer release if there is one; no-op unless `selfUpdates` |
 
 ### RimWorld service (`internal/rimworld/service.go`)
 
@@ -155,7 +156,7 @@ Each game's `frontend/src/lib/<game>/types.ts` narrows the generated
 App (`internal/models/models.go`):
 
 ```
-AppInfo         { version, dataRoot }
+AppInfo         { version, dataRoot, selfUpdates }
 ```
 
 RimWorld (`internal/rimworld/models/models.go`):
@@ -399,6 +400,29 @@ already exists, i.e. whether a sync would need to install it.
 Definition of done: backend ⇒ `go vet -tags gtk3 ./...` clean, `gofmt -l .`
 empty, and unit tests for pure logic (`go test -tags gtk3 ./...`); frontend ⇒
 `npm run check` clean and `npm run build` succeeds in `frontend/`.
+
+## Self-update
+
+Release builds for platforms without a package manager (Windows today) update
+themselves through Wails' updater (`pkg/updater`) with the `endpoint`
+provider: a signed Wails update manifest at a static URL, produced by
+`wails3 updater manifest` in the release pipeline. `main.go` enables it only
+when `muster/internal/version.UpdateManifestURL` was injected at build time
+(`-ldflags -X`); dev builds and the Arch package (pacman updates it) leave it
+empty and `AppInfo.selfUpdates` is false.
+
+Trust: every artifact is signed (ed25519ph over its sha512) with a key held
+only by the release pipeline; the matching public key is `build/updater.pub`,
+embedded in the binary and pinned as the updater's only trust root. The
+manifest URL cannot substitute a key.
+
+Behaviour: the Updater's own periodic loop opens the built-in window even
+when up to date, so `setupUpdater` runs a silent `Check` ten seconds after
+start and every six hours, and calls `CheckAndInstall` (which opens the
+window, downloads, verifies, and offers Restart & Apply) only when a release
+is found. The settings modals' About section offers a manual check.
+`version.Version` is the version of record for the comparison and must match
+the version the manifest is published under.
 
 ## Platform notes
 

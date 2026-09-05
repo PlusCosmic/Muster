@@ -54,6 +54,24 @@ hand-maintained counter, so each build is an upgrade to pacman even when the
 should recognise as a release; `frontend/package.json` tracks it but is not
 what the dispatch reads.
 
+## Windows
+
+The publish workflow also builds a Windows release when the package is
+`muster`: `muster.exe` cross-compiled from Linux (`CGO_ENABLED=0
+GOOS=windows`) with the manifest URL and the update-manifest URL injected
+with `-ldflags -X`, an NSIS per-user installer (no UAC, installs to
+`%LOCALAPPDATA%\Programs\Muster`) built with `makensis` from
+`build/windows/nsis`, and a zip of the bare exe as the updater artifact.
+`wails3 updater manifest -key … -channel stable` signs the zip and writes
+`stable.json`; `wails3 updater verify` checks it against `build/updater.pub`
+before anything is uploaded. Everything lands under `<prefix>/muster/windows/`
+in the same bucket as the pacman repository. The signing key is the
+packaging repository's `MUSTER_UPDATER_KEY` secret.
+
+Friends install once from `…/muster/windows/Muster-installer.exe`; the app
+then finds later versions itself. The exe is unsigned, so SmartScreen shows
+"unknown publisher" on that first install.
+
 ## Versioning
 
 `build/config.yml` (`info.version`) is the version of record. Keep

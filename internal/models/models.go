@@ -13,6 +13,9 @@ package models
 type AppInfo struct {
 	Version  string `json:"version"`
 	DataRoot string `json:"dataRoot"`
+	// SelfUpdates: this build checks for and installs its own updates
+	// (Windows/macOS release builds). The Arch package updates through pacman.
+	SelfUpdates bool `json:"selfUpdates"`
 }
 
 // Str returns a pointer to s, or nil when s is empty.
