@@ -1,4 +1,4 @@
-/* RimForge — global stylesheet. All design tokens live here. */
+/* Muster — global stylesheet. All design tokens live here. */
 
 :root {
   /* Surfaces — warm-tinted neutrals so the rust accent sits naturally */
@@ -57,6 +57,7 @@
   --t-fast: 90ms ease;
   --t-med: 160ms ease;
 
+  --rail-w: 52px;
   --sidebar-w: 268px;
   --header-h: 60px;
 

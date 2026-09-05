@@ -1,13 +1,13 @@
 [Desktop Entry]
 Version=1.0
-Name=RimForge
-Comment=Profile and mod list manager for RimWorld
+Name=Muster
+Comment=Shared mod setups for RimWorld and Minecraft
 # The Exec line includes %u to pass the URL to the application
-Exec=/usr/local/bin/rimforge %u
+Exec=/usr/local/bin/muster %u
 Terminal=false
 Type=Application
-Icon=rimforge
+Icon=muster
 Categories=Utility;
-StartupWMClass=rimforge
+StartupWMClass=muster
 
  

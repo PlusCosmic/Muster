@@ -1,12 +1,21 @@
-# RimForge
+# Muster
 
-A cross-platform (Linux / Windows / macOS) desktop manager for RimWorld
-**profiles** — isolated `-savedatafolder` directories, each with its own mod
-list, mod settings, and saves, sharing one installed game and Workshop library.
+A cross-platform (Linux / Windows / macOS) desktop app for sharing mod setups
+with friends and keeping them in sync. One shell, one game module per game:
+
+- **RimWorld**: profiles — isolated `-savedatafolder` directories, each with its
+  own mod list, mod settings and saves, sharing one installed game and Workshop
+  library — with a mod list editor and RimSort-style auto-sort.
+- **Minecraft** (in progress): pull a manifest of shared modpacks and set the
+  chosen one up as a profile in the official Minecraft launcher, kept up to date
+  from its packwiz source.
+
+Muster grew out of RimForge, its RimWorld-only predecessor, and adopts a
+RimForge data directory on first start.
 
 Built with Go + Wails 3 and Svelte 5.
 
-## What it does
+## RimWorld module
 
 - **Profiles**: create, rename, clone, delete (to system trash), and import
   your current vanilla RimWorld setup as a starting profile.
@@ -44,26 +53,27 @@ cd frontend && npm run check && npm run build && cd ..
 wails3 generate bindings -ts -i -clean=true -d frontend/bindings -f "-tags gtk3"
 gofmt -l .                      # must print nothing
 go vet -tags gtk3 ./...
-go test ./...
-go build -tags gtk3,production -trimpath -ldflags="-w -s" -o bin/rimforge .
+go test -tags gtk3 ./...
+go build -tags gtk3,production -trimpath -ldflags="-w -s" -o bin/muster .
 ```
 
-`frontend/bindings` is generated from `app.go` and `internal/models` and is
-committed, so `npm run check` works without a Go toolchain; regenerate it
-whenever the service or a model changes (the workflow fails if it is stale).
-On Linux, Wails 3 defaults to GTK4/WebKitGTK 6.0; every Go command here
-passes `gtk3` to link against webkit2gtk-4.1 instead. Arch packages both
-(`webkit2gtk-4.1` and `webkitgtk-6.0`); the tag picks the one the release
-build and the Arch package depend on. Windows and macOS need no tag.
+`frontend/bindings` is generated from the Wails services (`app.go`,
+`internal/rimworld/service.go`) and their models packages and is committed, so
+`npm run check` works without a Go toolchain; regenerate it whenever a service
+or a model changes (the workflow fails if it is stale). On Linux, Wails 3
+defaults to GTK4/WebKitGTK 6.0; every Go command here passes `gtk3` to link
+against webkit2gtk-4.1 instead. Arch packages both (`webkit2gtk-4.1` and
+`webkitgtk-6.0`); the tag picks the one the release build and the Arch package
+depend on. Windows and macOS need no tag.
 
 During `npm run dev`, appending `?mock=1` to the URL swaps in a fixture
 backend so the UI can be worked on in a plain browser.
 
-`RIMFORGE_DATA_DIR` overrides the data root (`~/.local/share/rimforge` by
-default) — used by the profile-lifecycle tests to avoid touching real data.
+`MUSTER_DATA_DIR` overrides the data root (`~/.local/share/muster` by
+default) — used by the tests to avoid touching real data.
 
 The backend↔frontend contract lives in `docs/ARCHITECTURE.md` and is binding:
-if the command surface changes, that file changes in the same commit.
+if a command surface changes, that file changes in the same commit.
 
 ## Licence
 
