@@ -72,6 +72,9 @@ jobs:
       # packages: the Wails root package needs each platform's toolchain.
       - run: GOOS=windows go vet ./internal/...
       - run: GOOS=darwin go vet ./internal/...
+      # The root package too, the way the windows job builds it: pure Go,
+      # so no Windows toolchain needed. Catches Unix-only syscall fields.
+      - run: CGO_ENABLED=0 GOOS=windows go vet -tags production .
       - run: go test -tags gtk3 ./...
       - run: go build -tags gtk3,production -trimpath -buildvcs=false -ldflags="-w -s" -o bin/muster .
 
