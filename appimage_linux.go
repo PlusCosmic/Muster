@@ -1,3 +1,5 @@
+//go:build linux
+
 package main
 
 // Self-update inside an AppImage.
@@ -26,11 +28,15 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"syscall"
+
+	"github.com/wailsapp/wails/v3/pkg/application"
+	"github.com/wailsapp/wails/v3/pkg/updater"
 )
 
 const (
@@ -130,4 +136,40 @@ func launchAppImageHelper(appImage, staged string) error {
 	// Its own session, so it outlives this process and its process group.
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 	return cmd.Start()
+}
+
+// offerAppImageRestart asks to restart once the updater has a verified
+// update, and performs the AppImage swap (above) when the user agrees.
+// Declining leaves the verified download where the updater staged it; the
+// next check either offers it again or replaces it.
+func offerAppImageRestart(app *application.App, appImage string) {
+	app.Event.On(updater.EventUpdateReady, func(e *application.CustomEvent) {
+		v := ""
+		if rel, ok := e.Data.(*updater.Release); ok && rel != nil {
+			v = " " + rel.Version
+		}
+		staged := app.Updater.DownloadedPath()
+		if staged == "" {
+			return
+		}
+		restart := func() {
+			copy, err := stageBesideAppImage(staged, appImage)
+			if err == nil {
+				err = launchAppImageHelper(appImage, copy)
+			}
+			if err != nil {
+				log.Printf("muster: update: %v", err)
+				app.Dialog.Warning().SetTitle("Could not install the update").
+					SetMessage("Muster" + v + " was downloaded but could not replace " + appImage + ":\n\n" + err.Error() +
+						"\n\nDownload the new AppImage from musterlauncher.com/download instead.").Show()
+				return
+			}
+			app.Quit()
+		}
+		d := app.Dialog.Question().SetTitle("Update ready").
+			SetMessage("Muster" + v + " has been downloaded and verified. Restart now to finish updating?")
+		later := d.AddButton("Later")
+		now := d.AddButton("Restart now").OnClick(restart)
+		d.SetDefaultButton(now).SetCancelButton(later).Show()
+	})
 }

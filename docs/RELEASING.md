@@ -129,7 +129,7 @@ The AppImage updates itself, but not the way Windows does. Wails' updater
 replaces `os.Executable()` and re-executes it as the swap helper; inside an
 AppImage that path is a file in a read-only FUSE mount that disappears when
 the app exits, and the file to replace is the AppImage itself (`$APPIMAGE`).
-`appimage.go` arranges the updater's own helper protocol around that: the
+`appimage_linux.go` arranges the updater's own helper protocol around that: the
 updater checks, downloads and verifies headlessly, a native dialog offers the
 restart, and on yes the verified file is copied next to the AppImage (same
 filesystem, so the helper's rename works) and the AppImage file is launched
