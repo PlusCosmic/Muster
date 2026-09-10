@@ -513,7 +513,7 @@ when `MUSTER_NO_SELF_UPDATE` is set (dev); then `AppInfo.selfUpdates` is
 false.
 
 Inside an AppImage the updater runs headless (`updater.WindowNone`) and
-`appimage.go` supplies the restart: a native dialog, then the AppImage file
+`appimage_linux.go` supplies the restart: a native dialog, then the AppImage file
 itself is launched as the swap helper with `$APPIMAGE` as the target and the
 verified download copied beside it, because the updater's own restart would
 replace the read-only mounted binary. See `docs/RELEASING.md`.
