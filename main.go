@@ -39,7 +39,7 @@ var updaterPublicKey []byte
 const updateCheckInterval = 6 * time.Hour
 
 func main() {
-	// An AppImage updating itself spawns two helpers (see appimage.go); this
+	// An AppImage updating itself spawns two helpers (see appimage_linux.go); this
 	// stops the one that cannot work before application.New runs it.
 	neutraliseMountedHelper()
 
@@ -132,7 +132,7 @@ func main() {
 //
 // On Windows the updater's built-in window shows the download and offers
 // the restart. Inside an AppImage the window's restart cannot work (see
-// appimage.go), so the download runs headless and a native dialog offers
+// appimage_linux.go), so the download runs headless and a native dialog offers
 // the restart once the update is verified.
 func setupUpdater(app *application.App) func() (bool, error) {
 	if os.Getenv("MUSTER_NO_SELF_UPDATE") != "" {
@@ -198,40 +198,4 @@ func setupUpdater(app *application.App) func() (bool, error) {
 		go install()
 		return true, nil
 	}
-}
-
-// offerAppImageRestart asks to restart once the updater has a verified
-// update, and performs the AppImage swap (appimage.go) when the user agrees.
-// Declining leaves the verified download where the updater staged it; the
-// next check either offers it again or replaces it.
-func offerAppImageRestart(app *application.App, appImage string) {
-	app.Event.On(updater.EventUpdateReady, func(e *application.CustomEvent) {
-		v := ""
-		if rel, ok := e.Data.(*updater.Release); ok && rel != nil {
-			v = " " + rel.Version
-		}
-		staged := app.Updater.DownloadedPath()
-		if staged == "" {
-			return
-		}
-		restart := func() {
-			copy, err := stageBesideAppImage(staged, appImage)
-			if err == nil {
-				err = launchAppImageHelper(appImage, copy)
-			}
-			if err != nil {
-				log.Printf("muster: update: %v", err)
-				app.Dialog.Warning().SetTitle("Could not install the update").
-					SetMessage("Muster" + v + " was downloaded but could not replace " + appImage + ":\n\n" + err.Error() +
-						"\n\nDownload the new AppImage from musterlauncher.com/download instead.").Show()
-				return
-			}
-			app.Quit()
-		}
-		d := app.Dialog.Question().SetTitle("Update ready").
-			SetMessage("Muster" + v + " has been downloaded and verified. Restart now to finish updating?")
-		later := d.AddButton("Later")
-		now := d.AddButton("Restart now").OnClick(restart)
-		d.SetDefaultButton(now).SetCancelButton(later).Show()
-	})
 }
