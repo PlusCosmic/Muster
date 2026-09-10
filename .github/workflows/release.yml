@@ -129,9 +129,10 @@ jobs:
 
   # Windows and the Linux AppImage have no package manager for us, so they
   # are published as a GitHub release, once per version: a merge that does
-  # not bump build/config.yml republishes nothing here. The Windows build
-  # updates itself from the signed manifest attached to the release
-  # (docs/ARCHITECTURE.md "Self-update"); the AppImage does not, yet.
+  # not bump build/config.yml republishes nothing here. Both update
+  # themselves from the signed manifest attached to the release
+  # (docs/ARCHITECTURE.md "Self-update"), so the manifest is signed in the
+  # release job, over both artifacts.
   version:
     needs: verify
     runs-on: ubuntu-latest
@@ -180,8 +181,8 @@ jobs:
 
       - name: Install toolchain
         run: |
-          # nsis builds the installer; the wails3 CLI (update manifest) links
-          # webkit2gtk-4.1 like the app does on Linux.
+          # nsis builds the installer; the wails3 CLI (webview2 bootstrapper)
+          # links webkit2gtk-4.1 like the app does on Linux.
           sudo apt-get update
           sudo apt-get install -y nsis zip libwebkit2gtk-4.1-dev libgtk-3-dev
           go install -tags gtk3 github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-beta.16
@@ -205,23 +206,12 @@ jobs:
           # OutFile is ${INFO_PROJECTNAME}-${ARCH}-installer.exe, and the project name is "Muster".
           mv ../../../bin/Muster-amd64-installer.exe ../../../bin/Muster-installer.exe
 
-      - name: Sign the update manifest
+      - name: Zip the updater artifact
         working-directory: bin
         env:
           VERSION: ${{ needs.version.outputs.version }}
-          UPDATER_KEY: ${{ secrets.MUSTER_UPDATER_KEY }}
         run: |
-          test -n "$UPDATER_KEY" || { echo "MUSTER_UPDATER_KEY secret is missing" >&2; exit 1; }
-          umask 077; printf '%s\n' "$UPDATER_KEY" > updater.key
           zip -q "muster-$VERSION-windows-amd64.zip" muster.exe
-          # Artifact URLs point at this release's own permanent download path,
-          # so an older manifest a client already fetched stays valid.
-          wails3 updater manifest -version "$VERSION" -channel stable \
-            -name "Muster $VERSION" -key updater.key \
-            -url-prefix "https://github.com/${{ github.repository }}/releases/download/v$VERSION/" \
-            -output stable.json "muster-$VERSION-windows-amd64.zip"
-          rm -f updater.key
-          wails3 updater verify -manifest stable.json -publickey ../build/updater.pub -dir .
           rm -f muster.exe
 
       - uses: actions/upload-artifact@v4
@@ -230,7 +220,6 @@ jobs:
           path: |
             bin/muster-${{ needs.version.outputs.version }}-windows-amd64.zip
             bin/Muster-installer.exe
-            bin/stable.json
           if-no-files-found: error
           retention-days: 3
 
@@ -272,7 +261,10 @@ jobs:
           wails3 generate appimage -binary bin/muster -icon build/linux/appimage/muster.png \
             -desktopfile build/linux/appimage/muster.desktop \
             -outputdir bin -builddir build/linux/appimage/build
-          # A fixed name so releases/latest/download/… on the website never goes stale.
+          # A fixed name so releases/latest/download/… on the website never
+          # goes stale. It is also the updater artifact: "linux" and "x86_64"
+          # in the name are what `wails3 updater manifest` infers the
+          # platform and architecture from.
           mv bin/muster-x86_64.AppImage bin/Muster-linux-x86_64.AppImage
           chmod +x bin/Muster-linux-x86_64.AppImage
           # Smoke test: the bundle must mount and resolve every library. With
@@ -298,10 +290,40 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
       - uses: actions/download-artifact@v4
         with:
           path: dist
           merge-multiple: true
+
+      - name: Install the wails3 CLI
+        run: |
+          # The CLI links webkit2gtk-4.1 like the app does on Linux.
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev
+          go install -tags gtk3 github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-beta.16
+
+      - name: Sign the update manifest
+        working-directory: dist
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+          UPDATER_KEY: ${{ secrets.MUSTER_UPDATER_KEY }}
+        run: |
+          test -n "$UPDATER_KEY" || { echo "MUSTER_UPDATER_KEY secret is missing" >&2; exit 1; }
+          umask 077; printf '%s\n' "$UPDATER_KEY" > updater.key
+          # Artifact URLs point at this release's own permanent download path,
+          # so an older manifest a client already fetched stays valid. One
+          # entry per platform; the app picks its own by platform and arch.
+          wails3 updater manifest -version "$VERSION" -channel stable \
+            -name "Muster $VERSION" -key updater.key \
+            -url-prefix "https://github.com/${{ github.repository }}/releases/download/v$VERSION/" \
+            -output stable.json "muster-$VERSION-windows-amd64.zip" Muster-linux-x86_64.AppImage
+          rm -f updater.key
+          wails3 updater verify -manifest stable.json -publickey ../build/updater.pub -dir .
+          # Both platforms must be in it, or one of them silently never updates.
+          grep -q '"platform": *"windows"' stable.json && grep -q '"platform": *"linux"' stable.json
 
       - name: Publish the release
         env:
@@ -310,7 +332,7 @@ jobs:
         run: |
           ls -la dist
           gh release create "v$VERSION" --title "Muster $VERSION" --target "$GITHUB_SHA" \
-            --notes "Windows: run Muster-installer.exe once; the app updates itself from then on. Linux: Muster-linux-x86_64.AppImage (chmod +x and run; re-download to update), or pacman on Arch." \
+            --notes "Windows: run Muster-installer.exe once. Linux: chmod +x Muster-linux-x86_64.AppImage and run it. Both update themselves from then on." \
             "dist/muster-$VERSION-windows-amd64.zip" dist/Muster-installer.exe dist/stable.json \
             dist/Muster-linux-x86_64.AppImage
-          echo "Released v$VERSION: Windows installer, update manifest, Linux AppImage." >> "$GITHUB_STEP_SUMMARY"
+          echo "Released v$VERSION: Windows installer, Linux AppImage, signed update manifest for both." >> "$GITHUB_STEP_SUMMARY"
