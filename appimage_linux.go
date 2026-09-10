@@ -139,7 +139,7 @@ func launchAppImageHelper(appImage, staged string) error {
 }
 
 // offerAppImageRestart asks to restart once the updater has a verified
-// update, and performs the AppImage swap (appimage.go) when the user agrees.
+// update, and performs the AppImage swap (above) when the user agrees.
 // Declining leaves the verified download where the updater staged it; the
 // next check either offers it again or replaces it.
 func offerAppImageRestart(app *application.App, appImage string) {
