@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Muster
+Comment=Shared mod setups for RimWorld and Minecraft
+Exec=muster
+Icon=muster
+Terminal=false
+Categories=Game;Utility;
+StartupWMClass=muster

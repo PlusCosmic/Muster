@@ -500,14 +500,23 @@ empty, and unit tests for pure logic (`go test -tags gtk3 ./...`); frontend ⇒
 
 ## Self-update
 
-Builds for platforms without a package manager (Windows today, macOS when it
-ships) update themselves through Wails' updater (`pkg/updater`) with the
-`endpoint` provider: the signed Wails update manifest `stable.json` attached
-to the latest GitHub release, at `version.UpdateManifestURL`
+Builds for platforms without a package manager (Windows, the Linux AppImage,
+macOS when it ships) update themselves through Wails' updater
+(`pkg/updater`) with the `endpoint` provider: the signed Wails update
+manifest `stable.json` attached to the latest GitHub release, at
+`version.UpdateManifestURL`
 (`github.com/PlusCosmic/Muster/releases/latest/download/stable.json`, a
-stable URL GitHub redirects to the newest release's asset). `main.go` leaves
-it off on Linux, where the package manager updates the app, and when
-`MUSTER_NO_SELF_UPDATE` is set (dev); then `AppInfo.selfUpdates` is false.
+stable URL GitHub redirects to the newest release's asset), with one entry
+per platform. `main.go` leaves it off on Linux unless the process runs from
+an AppImage (`APPIMAGE` set), since a package manager updates a package, and
+when `MUSTER_NO_SELF_UPDATE` is set (dev); then `AppInfo.selfUpdates` is
+false.
+
+Inside an AppImage the updater runs headless (`updater.WindowNone`) and
+`appimage.go` supplies the restart: a native dialog, then the AppImage file
+itself is launched as the swap helper with `$APPIMAGE` as the target and the
+verified download copied beside it, because the updater's own restart would
+replace the read-only mounted binary. See `docs/RELEASING.md`.
 
 Trust: every artifact is signed (ed25519ph over its sha512) with a key held
 only by the release pipeline; the matching public key is `build/updater.pub`,
