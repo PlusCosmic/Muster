@@ -1,13 +1,15 @@
 # Releasing
 
-Muster has two release channels, both driven by merges to `main`:
+Muster has three release channels, all driven by merges to `main`:
 
 - **Arch**: a package published to a private pacman repository on Backblaze
   B2. No in-app updater there — a machine changes only when `pacman -Syu`
-  runs.
+  runs. This is the maintainer's own machines, not a public channel.
 - **Windows**: a GitHub release per version (see "Windows" below) with an
   installer and a signed update manifest; installed copies update themselves
   from it.
+- **Linux AppImage**: attached to the same GitHub release (see "Linux
+  AppImage" below). The public Linux download; it does not self-update.
 
 ## How it works
 
@@ -59,11 +61,27 @@ hand-maintained counter, so each build is an upgrade to pacman even when the
 should recognise as a release; `frontend/package.json` tracks it but is not
 what the dispatch reads.
 
-## Windows
+## GitHub releases
 
-The same workflow's `windows` job publishes a GitHub release, once per
-version: when `v<version>` (from `build/config.yml`) does not exist yet, it
-cross-compiles `muster.exe` from Linux (`CGO_ENABLED=0 GOOS=windows`), builds
+The same workflow publishes a GitHub release, once per version: the `version`
+job checks whether `v<version>` (from `build/config.yml`) exists; if not, the
+`windows` and `linux` jobs build their artifacts and the `release` job creates
+the release with all of them attached:
+
+```
+Muster-installer.exe                # Windows: first install
+muster-<version>-windows-amd64.zip  # Windows: what the updater downloads
+stable.json                         # Windows: the signed manifest the app polls
+Muster-linux-x86_64.AppImage        # Linux: the public download
+```
+
+Asset names without a version in them are deliberate: the website links
+`releases/latest/download/<name>`, which GitHub redirects to the newest
+release, so the links never go stale.
+
+### Windows
+
+The `windows` job cross-compiles `muster.exe` from Linux (`CGO_ENABLED=0 GOOS=windows`), builds
 the per-user NSIS installer (no UAC; `%LOCALAPPDATA%\Programs\Muster`) with
 `makensis` from `build/windows/nsis`, zips the bare exe as the updater
 artifact, signs a Wails update manifest with the `MUSTER_UPDATER_KEY` secret
@@ -86,6 +104,37 @@ The exe is unsigned, so SmartScreen shows "unknown publisher" on the first
 install. Rotating the signing key means shipping a build with the new public
 key first: an app pinned to the old key rejects manifests signed by the new.
 
+### Linux AppImage
+
+The `linux` job builds the same `gtk3` binary the Arch package ships and
+wraps it with `wails3 generate appimage`, which runs linuxdeploy with its
+GTK plugin and additionally copies WebKitGTK's helper processes
+(`WebKitWebProcess`, `WebKitNetworkProcess`) and injected bundle into the
+AppDir — without those the webview cannot start on a machine that has no
+webkit2gtk-4.1 of its own. The result is around 110 MB, most of it WebKit.
+The desktop file and icon it embeds are `build/linux/appimage/muster.desktop`
+and `build/appicon.png`.
+
+It builds on `ubuntu-22.04` on purpose: an AppImage carries its own libraries
+but not glibc, so it runs only on distributions at least as new as the one
+that built it. Moving the runner forward raises that floor.
+
+The AppImage does not self-update. `main.go` leaves the updater off on Linux,
+and Wails' updater replaces `os.Executable()`, which inside a mounted AppImage
+is a read-only path; teaching it to replace `$APPIMAGE` instead is the missing
+piece. Until then the release notes and the website say to re-download.
+
+To rehearse locally (needs the `wails3` CLI; the tooling it downloads lands in
+the build directory, which is git-ignored):
+
+```sh
+go build -tags gtk3,production -trimpath -ldflags="-w -s" -o bin/muster .
+cp build/appicon.png build/linux/appimage/muster.png
+wails3 generate appimage -binary bin/muster -icon build/linux/appimage/muster.png \
+  -desktopfile build/linux/appimage/muster.desktop -outputdir bin \
+  -builddir build/linux/appimage/build
+```
+
 ## Versioning
 
 `build/config.yml` (`info.version`) is the version of record. Keep
@@ -95,7 +144,12 @@ enforces that today.
 
 ## Installing
 
-Client machines need the `[cosmic]` repository in `/etc/pacman.conf`; the server
+Windows and Linux users download from the GitHub release (or from
+[musterlauncher.com/download](https://musterlauncher.com/download), which
+links the same assets). On Linux: `chmod +x Muster-linux-x86_64.AppImage`
+and run it.
+
+Arch machines with the private repository need the `[cosmic]` repository in `/etc/pacman.conf`; the server
 line is recorded in [PlusCosmic/packages], which is private precisely because
 that URL is the only thing keeping the package repository unlisted. This
 repository is public, but the source is all rights reserved — see `LICENSE`.
