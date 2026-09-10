@@ -9,7 +9,8 @@ Muster has three release channels, all driven by merges to `main`:
   installer and a signed update manifest; installed copies update themselves
   from it.
 - **Linux AppImage**: attached to the same GitHub release (see "Linux
-  AppImage" below). The public Linux download; it does not self-update.
+  AppImage" below). The public Linux download; it updates itself from the
+  same manifest.
 
 ## How it works
 
@@ -71,9 +72,14 @@ the release with all of them attached:
 ```
 Muster-installer.exe                # Windows: first install
 muster-<version>-windows-amd64.zip  # Windows: what the updater downloads
-stable.json                         # Windows: the signed manifest the app polls
-Muster-linux-x86_64.AppImage        # Linux: the public download
+Muster-linux-x86_64.AppImage        # Linux: the download, and what the updater downloads
+stable.json                         # the signed manifest both poll, one entry per platform
 ```
+
+The `release` job signs the manifest over both updater artifacts once the
+`windows` and `linux` jobs have uploaded them; the app picks its entry by
+platform and architecture, which `wails3 updater manifest` infers from the
+file names (`windows`/`amd64`, `linux`/`x86_64`).
 
 Asset names without a version in them are deliberate: the website links
 `releases/latest/download/<name>`, which GitHub redirects to the newest
@@ -119,10 +125,20 @@ It builds on `ubuntu-22.04` on purpose: an AppImage carries its own libraries
 but not glibc, so it runs only on distributions at least as new as the one
 that built it. Moving the runner forward raises that floor.
 
-The AppImage does not self-update. `main.go` leaves the updater off on Linux,
-and Wails' updater replaces `os.Executable()`, which inside a mounted AppImage
-is a read-only path; teaching it to replace `$APPIMAGE` instead is the missing
-piece. Until then the release notes and the website say to re-download.
+The AppImage updates itself, but not the way Windows does. Wails' updater
+replaces `os.Executable()` and re-executes it as the swap helper; inside an
+AppImage that path is a file in a read-only FUSE mount that disappears when
+the app exits, and the file to replace is the AppImage itself (`$APPIMAGE`).
+`appimage.go` arranges the updater's own helper protocol around that: the
+updater checks, downloads and verifies headlessly, a native dialog offers the
+restart, and on yes the verified file is copied next to the AppImage (same
+filesystem, so the helper's rename works) and the AppImage file is launched
+as the helper with the target set to itself. Its runtime mounts it
+independently of the exiting app; `updater.HandleHelperMode` in it waits for
+the app to exit, backs up, swaps, restores the executable bit and relaunches.
+The AppImage's directory must therefore be writable by the user; if it is not
+the dialog says so and points at the website. `main.go` turns the updater on
+for Linux only when `APPIMAGE` is set, so the Arch package is unaffected.
 
 To rehearse locally (needs the `wails3` CLI; the tooling it downloads lands in
 the build directory, which is git-ignored):
