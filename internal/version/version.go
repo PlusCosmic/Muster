@@ -7,7 +7,7 @@
 package version
 
 // Version is the running version, without a "v" prefix.
-const Version = "0.2.1"
+const Version = "0.2.2"
 
 // UpdateManifestURL is where the self-updater looks for newer releases: the
 // signed Wails update manifest attached to the latest GitHub release. Public

@@ -39,6 +39,10 @@ var updaterPublicKey []byte
 const updateCheckInterval = 6 * time.Hour
 
 func main() {
+	// An AppImage updating itself spawns two helpers (see appimage.go); this
+	// stops the one that cannot work before application.New runs it.
+	neutraliseMountedHelper()
+
 	if runtime.GOOS == "linux" && os.Getenv("WEBKIT_DISABLE_DMABUF_RENDERER") == "" {
 		// WebKitGTK's DMA-BUF renderer crashes Wayland on NVIDIA (Gdk Error 71).
 		// Wails only sets this when it detects an NVIDIA GPU; set it
@@ -117,30 +121,50 @@ func main() {
 }
 
 // setupUpdater wires the self-updater on platforms where nothing else
-// updates the app (Linux builds come from a package manager), and returns
-// the "Check for updates" action for the App service (nil when updates are
-// off): a synchronous check whose result and error reach the caller, with
-// the install itself running on in the background when there is one. The Updater's own periodic loop opens the update window even when up
-// to date, so the timer here runs a silent Check and only opens the window
-// when there is something to install.
+// updates the app (Windows, and Linux when running from an AppImage; a
+// Linux package comes from a package manager), and returns the "Check for
+// updates" action for the App service (nil when updates are off): a
+// synchronous check whose result and error reach the caller, with the
+// install itself running on in the background when there is one. The
+// Updater's own periodic loop opens the update window even when up to date,
+// so the timer here runs a silent Check and only opens the window when
+// there is something to install.
+//
+// On Windows the updater's built-in window shows the download and offers
+// the restart. Inside an AppImage the window's restart cannot work (see
+// appimage.go), so the download runs headless and a native dialog offers
+// the restart once the update is verified.
 func setupUpdater(app *application.App) func() (bool, error) {
-	if runtime.GOOS == "linux" || os.Getenv("MUSTER_NO_SELF_UPDATE") != "" {
+	if os.Getenv("MUSTER_NO_SELF_UPDATE") != "" {
 		return nil
+	}
+	appImage := ""
+	if runtime.GOOS == "linux" {
+		if appImage = appImagePath(); appImage == "" {
+			return nil
+		}
 	}
 	provider, err := endpoint.New(endpoint.Config{URL: version.UpdateManifestURL, Channel: "stable"})
 	if err != nil {
 		log.Printf("muster: updater disabled: %v", err)
 		return nil
 	}
+	var window updater.WindowOption = &updater.BuiltinWindow{}
+	if appImage != "" {
+		window = updater.WindowNone
+	}
 	err = app.Updater.Init(updater.Config{
 		CurrentVersion: version.Version,
 		Providers:      []updater.Provider{provider},
 		PublicKey:      updaterPublicKey,
-		Window:         &updater.BuiltinWindow{},
+		Window:         window,
 	})
 	if err != nil {
 		log.Printf("muster: updater disabled: %v", err)
 		return nil
+	}
+	if appImage != "" {
+		offerAppImageRestart(app, appImage)
 	}
 	install := func() {
 		if err := app.Updater.CheckAndInstall(context.Background()); err != nil {
@@ -174,4 +198,40 @@ func setupUpdater(app *application.App) func() (bool, error) {
 		go install()
 		return true, nil
 	}
+}
+
+// offerAppImageRestart asks to restart once the updater has a verified
+// update, and performs the AppImage swap (appimage.go) when the user agrees.
+// Declining leaves the verified download where the updater staged it; the
+// next check either offers it again or replaces it.
+func offerAppImageRestart(app *application.App, appImage string) {
+	app.Event.On(updater.EventUpdateReady, func(e *application.CustomEvent) {
+		v := ""
+		if rel, ok := e.Data.(*updater.Release); ok && rel != nil {
+			v = " " + rel.Version
+		}
+		staged := app.Updater.DownloadedPath()
+		if staged == "" {
+			return
+		}
+		restart := func() {
+			copy, err := stageBesideAppImage(staged, appImage)
+			if err == nil {
+				err = launchAppImageHelper(appImage, copy)
+			}
+			if err != nil {
+				log.Printf("muster: update: %v", err)
+				app.Dialog.Warning().SetTitle("Could not install the update").
+					SetMessage("Muster" + v + " was downloaded but could not replace " + appImage + ":\n\n" + err.Error() +
+						"\n\nDownload the new AppImage from musterlauncher.com/download instead.").Show()
+				return
+			}
+			app.Quit()
+		}
+		d := app.Dialog.Question().SetTitle("Update ready").
+			SetMessage("Muster" + v + " has been downloaded and verified. Restart now to finish updating?")
+		later := d.AddButton("Later")
+		now := d.AddButton("Restart now").OnClick(restart)
+		d.SetDefaultButton(now).SetCancelButton(later).Show()
+	})
 }

@@ -90,4 +90,6 @@ All rights reserved — see `LICENSE`. The source is public to read, not to reus
 ## Releasing
 
 Every merge to `main` runs the checks above and, if they pass, publishes an Arch
-package to a private pacman repository. See `docs/RELEASING.md`.
+package to a private pacman repository and, once per version, a GitHub release
+with the Windows installer and a Linux AppImage. See `docs/RELEASING.md`.
+Downloads: [musterlauncher.com/download](https://musterlauncher.com/download).
