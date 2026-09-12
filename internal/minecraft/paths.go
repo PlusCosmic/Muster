@@ -1,11 +1,11 @@
-// Package minecraft is the Minecraft game module: shared packwiz modpacks,
-// pulled from a manifest, installed into their own directories and offered to
-// the official Minecraft launcher as profiles. Service is its face to the
-// frontend.
+// Package minecraft is the Minecraft game module: shared modpacks — packwiz
+// packs reached by a pack code or a manifest, and Modrinth modpacks added by
+// link — installed into their own directories and offered to the official
+// Minecraft launcher as profiles. Service is its face to the frontend.
 //
 // App-owned layout (`<data>/muster/minecraft`):
 //
-//	settings.json        # manifest and .minecraft overrides
+//	settings.json        # codes, Modrinth packs, manifest and .minecraft overrides
 //	packs/<id>/          # one install (the profile's gameDir) per pack
 //	  muster-pack.json   # what the last sync put there (packwiz.StateFile)
 //	java/jre-21/         # a Temurin JRE, only if no usable Java was found

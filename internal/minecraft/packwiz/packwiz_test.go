@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -433,5 +434,38 @@ func TestPlanRedownloadsCorruptedFilesAndUpgradesOldStamps(t *testing.T) {
 	state.Files["mods/alpha.jar"] = "sha512:0000"
 	if plan := MakePlan(res, dir, state, nil); len(plan.Download) != 1 {
 		t.Fatalf("%+v", plan)
+	}
+}
+
+func TestDownloadRetriesATruncatedBodyButNotAWrongHash(t *testing.T) {
+	jar := []byte("the whole jar")
+	jh, _ := HashBytes("sha256", jar)
+	var hits int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits++
+		switch r.URL.Path {
+		case "/flaky.jar":
+			w.Header().Set("Content-Length", strconv.Itoa(len(jar)))
+			if hits == 1 {
+				_, _ = w.Write(jar[:5]) // the server closes the connection short
+				return
+			}
+			_, _ = w.Write(jar)
+		case "/wrong.jar":
+			_, _ = w.Write([]byte("something else"))
+		}
+	}))
+	defer srv.Close()
+	c := &Client{HTTP: srv.Client()}
+	dir := t.TempDir()
+	e := Entry{Path: "mods/flaky.jar", URL: srv.URL + "/flaky.jar", HashFormat: "sha256", Hash: jh}
+	n, err := c.download(context.Background(), e, filepath.Join(dir, "flaky.jar"))
+	if err != nil || n != int64(len(jar)) || hits != 2 {
+		t.Fatalf("%d %v hits=%d", n, err, hits)
+	}
+	hits = 0
+	e = Entry{Path: "mods/wrong.jar", URL: srv.URL + "/wrong.jar", HashFormat: "sha256", Hash: jh}
+	if _, err := c.download(context.Background(), e, filepath.Join(dir, "wrong.jar")); err == nil || hits != 1 {
+		t.Fatalf("a complete body with the wrong hash must fail once: %v hits=%d", err, hits)
 	}
 }

@@ -7,6 +7,9 @@ type Settings struct {
 	// Codes are the pack codes the user has entered, with what each resolved
 	// to last time, so the pack list works when the registry is unreachable.
 	Codes []PackCode `json:"codes"`
+	// Modrinth is every Modrinth modpack the user added by link, with what
+	// each resolved to last time.
+	Modrinth []ModrinthPack `json:"modrinth"`
 	// ManifestURL is an optional pack list (a manifest) the user was given.
 	// Muster ships with none: the app knows nothing about any particular pack.
 	ManifestURL *string `json:"manifestUrl"`
@@ -27,6 +30,24 @@ type PackCode struct {
 	// Pack is the registration's pack entry as last seen, as JSON of the
 	// manifest entry shape. Kept opaque here so models stays free of the
 	// manifest package; the service decodes it.
+	Pack []byte `json:"pack"`
+}
+
+// ModrinthPack is one Modrinth modpack the user added.
+type ModrinthPack struct {
+	// ProjectID is Modrinth's stable id for the project; lookups use it.
+	ProjectID string `json:"projectId"`
+	// Slug is the project's slug when it was added; it names the pack
+	// (`modrinth-<slug>`) and so the install directory, and stays put even
+	// if the project is renamed on Modrinth.
+	Slug string `json:"slug"`
+	// Version is the version number the pack is held at. A sync installs
+	// exactly this; it only changes when the user picks another (or takes
+	// an update), never because Modrinth published one.
+	Version   string `json:"version"`
+	AddedAtMs int64  `json:"addedAtMs"`
+	// Pack is the project as last seen, in the manifest entry shape (like
+	// PackCode.Pack), so the pack stays listed when Modrinth is unreachable.
 	Pack []byte `json:"pack"`
 }
 
@@ -68,10 +89,16 @@ type Detected struct {
 type Pack struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
-	// Source is "code" (entered pack code) or "manifest" (from the pack list).
+	// Source is "code" (entered pack code), "modrinth" (a Modrinth modpack
+	// added by link) or "manifest" (from the pack list).
 	Source string `json:"source"`
 	// Code is the pack code this came from, when Source is "code".
-	Code        *string `json:"code"`
+	Code *string `json:"code"`
+	// Project is the Modrinth project slug, when Source is "modrinth".
+	Project *string `json:"project"`
+	// HeldVersion is the Modrinth version a sync installs, when Source is
+	// "modrinth". Updating is an explicit choice (SetModrinthVersion).
+	HeldVersion *string `json:"heldVersion"`
 	Description string  `json:"description"`
 	Icon        *string `json:"icon"`
 	PackURL     string  `json:"packUrl"`
@@ -97,23 +124,66 @@ type Pack struct {
 // PackCheck is the result of looking at the pack's current upstream state
 // without changing anything.
 type PackCheck struct {
-	ID            string `json:"id"`
+	ID string `json:"id"`
+	// LatestVersion is the newest the source offers: pack.toml's version for
+	// a packwiz pack, the newest release for a Modrinth pack.
 	LatestVersion string `json:"latestVersion"`
-	Minecraft     string `json:"minecraft"`
-	Loader        string `json:"loader"`
-	LoaderVersion string `json:"loaderVersion"`
+	// TargetVersion is what a sync installs now. For a packwiz pack it is
+	// LatestVersion; for a Modrinth pack it is the held version.
+	TargetVersion string `json:"targetVersion"`
+	// UpdateAvailable: a newer version exists than the one a sync would
+	// install (Modrinth packs only; the user chooses whether to take it).
+	UpdateAvailable bool   `json:"updateAvailable"`
+	Minecraft       string `json:"minecraft"`
+	Loader          string `json:"loader"`
+	LoaderVersion   string `json:"loaderVersion"`
 	// VersionID is the launcher installation id the profile needs.
 	VersionID string `json:"versionId"`
 	// LoaderInstalled: the launcher already has that installation.
 	LoaderInstalled bool `json:"loaderInstalled"`
 	ToDownload      int  `json:"toDownload"`
 	ToDelete        int  `json:"toDelete"`
-	UpToDate        bool `json:"upToDate"`
+	// UpToDate: the install matches TargetVersion and no file needs work.
+	UpToDate bool `json:"upToDate"`
+}
+
+// ModrinthVersion is one published version of a Modrinth modpack, for the
+// version picker.
+type ModrinthVersion struct {
+	ID     string `json:"id"`
+	Number string `json:"number"`
+	// Type is "release", "beta" or "alpha".
+	Type          string   `json:"type"`
+	PublishedAtMs int64    `json:"publishedAtMs"`
+	GameVersions  []string `json:"gameVersions"`
+	Loaders       []string `json:"loaders"`
+}
+
+// ModrinthLookup is what a pasted Modrinth link points at, before it is
+// added: enough to show the pack and pick a version.
+type ModrinthLookup struct {
+	// Project is the slug; Input is the link as pasted, to hand back to
+	// AddModrinthPack.
+	Project     string  `json:"project"`
+	Input       string  `json:"input"`
+	Name        string  `json:"name"`
+	Description string  `json:"description"`
+	Icon        *string `json:"icon"`
+	PageURL     string  `json:"pageUrl"`
+	// Versions, newest first. Suggested is the one preselected: the link's
+	// version when it named one, else the newest release.
+	Versions  []ModrinthVersion `json:"versions"`
+	Suggested string            `json:"suggested"`
+	// AlreadyAdded: this project is in the list already (at HeldVersion).
+	AlreadyAdded bool    `json:"alreadyAdded"`
+	HeldVersion  *string `json:"heldVersion"`
 }
 
 // SyncProgress is emitted as the `minecraft:sync` event during SyncPack.
 // Phase is "files" (Done/Total count downloads), "loader" (Current is a
-// step description; Done/Total are 0), or "profile".
+// step description; Done/Total are 0), "profile", or "waiting" (Current
+// says what the network is being waited on for; the previous phase resumes
+// after).
 type SyncProgress struct {
 	ID      string `json:"id"`
 	Phase   string `json:"phase"`

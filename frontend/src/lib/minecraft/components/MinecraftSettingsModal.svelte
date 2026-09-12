@@ -11,7 +11,7 @@
 
   let { onclose }: { onclose: () => void } = $props();
 
-  const blank: Settings = { codes: [], manifestUrl: null, registryUrlOverride: null, minecraftDirOverride: null, packs: {} };
+  const blank: Settings = { codes: [], modrinth: [], manifestUrl: null, registryUrlOverride: null, minecraftDirOverride: null, packs: {} };
   let draft = $state<Settings>({ ...(packs.settings ?? blank) });
   let draftTheme = $state(theme.current);
   let draftTitlebar = $state(titlebar.current);
@@ -64,8 +64,8 @@
   <section class="group">
     <h3>Pack sources</h3>
     <p class="group-note">
-      Packs normally arrive as codes: add one from the main screen. A pack list URL is the older
-      way in and still works alongside them.
+      Packs normally arrive as codes or Modrinth links: add one from the main screen. A pack list
+      URL is the older way in and still works alongside them.
     </p>
     <div class="field">
       <label class="label" for="mc-registry">Pack registry</label>
