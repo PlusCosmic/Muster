@@ -3,32 +3,55 @@
   import Icon from '$lib/shell/components/Icon.svelte';
   import { openExternal } from '$lib/shell/api';
   import MinecraftSettingsModal from '$lib/minecraft/components/MinecraftSettingsModal.svelte';
+  import ModrinthVersionModal from '$lib/minecraft/components/ModrinthVersionModal.svelte';
   import PackCard from '$lib/minecraft/components/PackCard.svelte';
-  import { packs } from '$lib/minecraft/stores/packs.svelte';
+  import { isModrinthLink, packs } from '$lib/minecraft/stores/packs.svelte';
+  import type { ModrinthLookup } from '$lib/minecraft/types';
   import { dialogs } from '$lib/shell/stores/dialogs.svelte';
 
   let settingsOpen = $state(false);
   let codeDraft = $state('');
   let addingCode = $state(false);
+  /** A Modrinth link looked up and waiting for a version to be chosen. */
+  let lookup = $state<ModrinthLookup | null>(null);
+  let addingModrinth = $state(false);
+
+  /** Add whatever was pasted: a Modrinth link opens the version picker. */
+  async function addInput(input: string): Promise<boolean> {
+    if (isModrinthLink(input)) {
+      const found = await packs.lookupModrinth(input);
+      if (found) lookup = found;
+      return !!found;
+    }
+    return !!(await packs.addCode(input));
+  }
 
   async function addCodeFromCard() {
     const code = codeDraft.trim();
     if (!code) return;
     addingCode = true;
-    const p = await packs.addCode(code);
+    const ok = await addInput(code);
     addingCode = false;
-    if (p) codeDraft = '';
+    if (ok) codeDraft = '';
+  }
+
+  async function confirmModrinth(version: string) {
+    if (!lookup) return;
+    addingModrinth = true;
+    const p = await packs.addModrinth(lookup.input, version);
+    addingModrinth = false;
+    if (p) lookup = null;
   }
 
   async function addCodeFlow() {
     const code = await dialogs.prompt({
       title: 'Add a pack',
-      body: 'Enter the pack code you were given. A pasted link with the code in it works too.',
-      label: 'Pack code',
-      placeholder: 'amber-otter-42',
+      body: 'Enter the pack code you were given, or paste a Modrinth modpack link and choose the version to install.',
+      label: 'Pack code or Modrinth link',
+      placeholder: 'amber-otter-42 or https://modrinth.com/modpack/…',
       confirmLabel: 'Add pack'
     });
-    if (code) await packs.addCode(code);
+    if (code) await addInput(code);
   }
 
   onMount(() => {
@@ -66,7 +89,7 @@
       <span class="sub">Shared packs</span>
     </div>
     <span class="spacer"></span>
-    <button class="btn btn-primary" onclick={addCodeFlow} title="Add a pack by its code">
+    <button class="btn btn-primary" onclick={addCodeFlow} title="Add a pack by its code or Modrinth link">
       <Icon name="plus" size={14} /> Add pack
     </button>
     <button class="btn" disabled={packs.loadingPacks || packs.syncingId !== null} onclick={refresh} title="Reload your packs and check for updates">
@@ -91,11 +114,11 @@
         <span class="mark" aria-hidden="true"><Icon name="minecraft" size={26} strokeWidth={1.5} /></span>
         <h2>Add your first pack</h2>
         <p>
-          Enter the pack code you were given by whoever runs it. Pasting a link that contains the code
-          works too.
+          Enter the pack code you were given by whoever runs it, or paste the link of any modpack on
+          Modrinth.
         </p>
         <form class="row" onsubmit={(e) => { e.preventDefault(); addCodeFromCard(); }}>
-          <input class="input mono" placeholder="amber-otter-42" bind:value={codeDraft} spellcheck="false" autocomplete="off" />
+          <input class="input mono" placeholder="amber-otter-42 or https://modrinth.com/modpack/…" bind:value={codeDraft} spellcheck="false" autocomplete="off" />
           <button class="btn btn-primary" type="submit" disabled={!codeDraft.trim() || addingCode}>
             {addingCode ? 'Looking up…' : 'Add pack'}
           </button>
@@ -126,7 +149,7 @@
         </div>
       {/if}
       {#if packs.packs.length === 0}
-        <div class="center"><Icon name="folder" size={24} /><span>No packs yet. Use Add pack to enter a code.</span></div>
+        <div class="center"><Icon name="folder" size={24} /><span>No packs yet. Use Add pack to enter a code or a Modrinth link.</span></div>
       {:else}
         <div class="grid">
           {#each packs.packs as pack (pack.id)}
@@ -140,6 +163,22 @@
 
 {#if settingsOpen}
   <MinecraftSettingsModal onclose={() => (settingsOpen = false)} />
+{/if}
+
+{#if lookup}
+  <ModrinthVersionModal
+    title={lookup.alreadyAdded ? 'Change version' : 'Add from Modrinth'}
+    name={lookup.name}
+    description={lookup.description}
+    pageUrl={lookup.pageUrl}
+    versions={lookup.versions}
+    suggested={lookup.suggested}
+    held={lookup.heldVersion}
+    confirmLabel={lookup.alreadyAdded ? 'Hold at' : 'Add'}
+    busy={addingModrinth}
+    onconfirm={confirmModrinth}
+    onclose={() => (lookup = null)}
+  />
 {/if}
 
 <style>

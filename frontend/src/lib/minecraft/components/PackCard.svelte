@@ -5,8 +5,9 @@
   import { toastError } from '$lib/shell/stores/toasts.svelte';
   import { dialogs } from '$lib/shell/stores/dialogs.svelte';
   import { packs } from '$lib/minecraft/stores/packs.svelte';
-  import type { Pack } from '$lib/minecraft/types';
+  import type { ModrinthVersion, Pack } from '$lib/minecraft/types';
   import LaunchSettings from './LaunchSettings.svelte';
+  import ModrinthVersionModal from './ModrinthVersionModal.svelte';
 
   let { pack }: { pack: Pack } = $props();
 
@@ -22,9 +23,14 @@
   const report = $derived(packs.reports[pack.id] ?? null);
   const progress = $derived(syncing ? packs.progress : null);
 
+  const modrinth = $derived(pack.source === 'modrinth');
+  /** A Modrinth pack held at a version other than the one on disk. */
+  const moving = $derived(modrinth && pack.installed && !!check && check.targetVersion !== pack.installedVersion);
+
   const action = $derived.by(() => {
     if (!pack.installed) return { label: 'Install', icon: 'download' as const };
-    if (check && !check.upToDate) return { label: 'Update', icon: 'refresh' as const };
+    if (moving && check) return { label: `Install v${check.targetVersion}`, icon: 'download' as const };
+    if (check && !check.upToDate) return { label: modrinth ? 'Repair' : 'Update', icon: 'refresh' as const };
     return { label: 'Re-sync', icon: 'refresh' as const };
   });
 
@@ -32,14 +38,41 @@
     if (syncing) return null;
     if (checking) return { kind: 'muted', text: 'Checking for updates…' };
     if (!check) return pack.installed ? { kind: 'muted', text: `Installed v${pack.installedVersion}` } : { kind: 'muted', text: 'Not installed' };
-    if (!pack.installed) return { kind: 'info', text: `v${check.latestVersion} · Minecraft ${check.minecraft} · ${check.loader} ${check.loaderVersion}` };
+    if (!pack.installed) return { kind: 'info', text: `v${check.targetVersion} · Minecraft ${check.minecraft} · ${check.loader} ${check.loaderVersion}` };
+    if (moving) {
+      const n = check.toDownload;
+      return { kind: 'warn', text: `Held at v${check.targetVersion}; v${pack.installedVersion} is installed (${n} file${n === 1 ? '' : 's'} to change)` };
+    }
     if (!check.upToDate) {
       const n = check.toDownload;
-      return { kind: 'warn', text: `Update available: v${check.latestVersion} (${n} file${n === 1 ? '' : 's'})` };
+      return modrinth
+        ? { kind: 'warn', text: `${n} file${n === 1 ? '' : 's'} missing or changed — repair to restore v${pack.installedVersion}` }
+        : { kind: 'warn', text: `Update available: v${check.latestVersion} (${n} file${n === 1 ? '' : 's'})` };
     }
     if (!check.loaderInstalled) return { kind: 'warn', text: 'Up to date, but the launcher is missing the mod loader — re-sync to install it' };
     return { kind: 'ok', text: `Up to date · v${pack.installedVersion}` };
   });
+
+  // Modrinth packs never move on their own: a newer release is offered, and
+  // the version picker lets the user choose any version, including older.
+  let versionsOpen = $state(false);
+  let versions = $state<ModrinthVersion[]>([]);
+  let loadingVersions = $state(false);
+  let changingVersion = $state(false);
+  async function openVersions() {
+    loadingVersions = true;
+    const vs = await packs.listVersions(pack.id);
+    loadingVersions = false;
+    if (!vs) return;
+    versions = vs;
+    versionsOpen = true;
+  }
+  async function holdAt(version: string) {
+    changingVersion = true;
+    const p = await packs.setVersion(pack.id, version);
+    changingVersion = false;
+    if (p) versionsOpen = false;
+  }
 
   const percent = $derived(
     progress && progress.phase === 'files' && progress.total > 0 ? Math.round((progress.done / progress.total) * 100) : null
@@ -54,23 +87,29 @@
         return progress.current;
       case 'profile':
         return 'Adding to the Minecraft launcher…';
+      case 'waiting':
+        return progress.current;
     }
     return progress.current;
   });
 
   const gb = (mb: number) => (mb / 1024).toFixed(1).replace(/\.0$/, '');
+  const removable = $derived(pack.source === 'modrinth' || !!pack.code);
   async function remove() {
-    if (!pack.code) return;
+    if (!removable) return;
+    const again = pack.source === 'modrinth' ? 'the link' : 'the code';
     const ok = await dialogs.confirm({
       title: `Remove ${pack.name}?`,
-      body: 'The pack disappears from this list. Its files and its entry in the Minecraft launcher are left in place; you can add the code again any time.',
+      body: `The pack disappears from this list. Its files and its entry in the Minecraft launcher are left in place; you can add ${again} again any time.`,
       confirmLabel: 'Remove',
       danger: true
     });
-    if (ok) await packs.removeCode(pack.code);
+    if (ok) await packs.remove(pack);
   }
 
-  const memory = $derived(`${gb(pack.launch.maxMemoryMb)} GB RAM${pack.launchCustomised ? '' : ' (recommended)'}`);
+  const memory = $derived(
+    `${gb(pack.launch.maxMemoryMb)} GB RAM${pack.launchCustomised ? '' : pack.recommendedMaxMemoryMb ? ' (recommended)' : ' (default)'}`
+  );
 </script>
 
 <article class="card" class:syncing>
@@ -81,6 +120,11 @@
         {#if pack.server}<span class="pill"><Icon name="link" size={11} /> {pack.server}</span>{/if}
         <button class="pill clickable" title="Launch settings" onclick={() => (launchOpen = !launchOpen)}>{memory}</button>
         {#if pack.code}<span class="pill muted mono" title="Pack code">{pack.code}</span>{/if}
+        {#if pack.source === 'modrinth'}
+          <button class="pill muted clickable" title="Open on Modrinth" onclick={() => openExternal(pack.packUrl)}>
+            Modrinth <Icon name="externalLink" size={10} />
+          </button>
+        {/if}
         {#if pack.installed && pack.syncedAtMs}
           <span class="pill muted" title="Last synced">synced {relativeTime(pack.syncedAtMs, 'a while ago')}</span>
         {/if}
@@ -102,6 +146,23 @@
       {#if status.kind === 'ok'}<span class="dot"></span>{:else if status.kind === 'warn'}<Icon name="alert" size={12} />{/if}
       {status.text}
     </p>
+  {/if}
+
+  {#if modrinth && !syncing}
+    <div class="held">
+      <span>Held at <strong class="mono">v{pack.heldVersion}</strong></span>
+      {#if check?.updateAvailable}
+        <span class="sep">·</span>
+        <span class="newer"><Icon name="info" size={12} /> v{check.latestVersion} is out</span>
+        <button class="btn btn-sm" disabled={busyElsewhere} onclick={() => packs.moveTo(pack.id, check.latestVersion)}>
+          <Icon name="download" size={12} /> Update to v{check.latestVersion}
+        </button>
+      {/if}
+      <span class="spacer"></span>
+      <button class="linkish" disabled={loadingVersions || busyElsewhere} onclick={openVersions}>
+        {loadingVersions ? 'Loading versions…' : 'Change version…'}
+      </button>
+    </div>
   {/if}
 
   {#if launchOpen && !syncing}
@@ -149,7 +210,7 @@
     <button class="btn btn-ghost btn-icon" title="Check for updates" disabled={checking || syncing} onclick={() => packs.check(pack.id)}>
       <Icon name="refresh" size={15} class={checking ? 'spin' : ''} />
     </button>
-    {#if pack.code}
+    {#if removable}
       <button class="btn btn-ghost btn-icon" title="Remove this pack from the list" disabled={syncing} onclick={remove}>
         <Icon name="trash" size={15} />
       </button>
@@ -157,7 +218,66 @@
   </footer>
 </article>
 
+{#if versionsOpen}
+  <ModrinthVersionModal
+    title="Change version"
+    name={pack.name}
+    pageUrl={pack.packUrl}
+    {versions}
+    suggested={pack.heldVersion ?? ''}
+    held={pack.heldVersion}
+    installed={pack.installedVersion}
+    confirmLabel="Hold at"
+    busy={changingVersion}
+    onconfirm={holdAt}
+    onclose={() => (versionsOpen = false)}
+  />
+{/if}
+
 <style>
+  .held {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    font-size: 12px;
+    color: var(--text-muted);
+    background: var(--bg-raised);
+    border-radius: var(--r-md);
+  }
+  .held strong {
+    color: var(--text);
+    font-weight: 600;
+  }
+  .held .sep {
+    color: var(--text-faint);
+  }
+  .held .newer {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--text);
+  }
+  .held .spacer {
+    flex: 1;
+  }
+  .held .linkish {
+    padding: 0;
+    font: inherit;
+    font-size: 12px;
+    color: var(--accent);
+    background: none;
+    border: none;
+    cursor: pointer;
+  }
+  .held .linkish:hover:not(:disabled) {
+    text-decoration: underline;
+  }
+  .held .linkish:disabled {
+    color: var(--text-faint);
+    cursor: default;
+  }
   .card {
     display: flex;
     flex-direction: column;

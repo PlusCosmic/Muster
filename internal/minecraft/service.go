@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"muster/internal/appdir"
@@ -14,8 +16,10 @@ import (
 	"muster/internal/minecraft/machine"
 	"muster/internal/minecraft/manifest"
 	"muster/internal/minecraft/models"
+	"muster/internal/minecraft/modrinth"
 	"muster/internal/minecraft/packwiz"
 	core "muster/internal/models"
+	"muster/internal/retry"
 	"muster/internal/version"
 )
 
@@ -37,6 +41,14 @@ type Service struct {
 	findJava func(ctx context.Context, minecraftDir string, progress func(string)) (string, error)
 	// TotalMemoryMb overrides machine memory detection; nil means the real value.
 	TotalMemoryMb func() int
+	// ModrinthURL replaces the Modrinth API base URL; "" means the real one.
+	ModrinthURL string
+
+	clientOnce sync.Once
+	httpClient *http.Client
+	// syncing is the id of the pack SyncPack is working on, so a network
+	// wait can be shown on its card; "" when idle.
+	syncing atomic.Value
 }
 
 func (s *Service) installer() *loader.Installer {
@@ -63,11 +75,37 @@ func (s *Service) javaFor(ctx context.Context, minecraftDir string, progress fun
 	return rt.Path, nil
 }
 
+// client is the one HTTP client every source, download and installer uses.
+// Its transport waits out rate limits and retries transient failures, so a
+// pack install takes longer rather than failing partway (internal/retry);
+// the transport is shared so a host's rate-limit pause covers every caller.
 func (s *Service) client() *http.Client {
 	if s.HTTP != nil {
 		return s.HTTP
 	}
-	return &http.Client{Timeout: 5 * time.Minute}
+	s.clientOnce.Do(func() {
+		s.httpClient = &http.Client{
+			Timeout:   10 * time.Minute,
+			Transport: &retry.Transport{OnWait: s.onWait},
+		}
+	})
+	return s.httpClient
+}
+
+// onWait tells the card being synced that the network is being waited on.
+func (s *Service) onWait(host string, d time.Duration, why string) {
+	id, _ := s.syncing.Load().(string)
+	if id == "" {
+		return
+	}
+	secs := int(d.Round(time.Second) / time.Second)
+	var msg string
+	if why == "rate limit" {
+		msg = fmt.Sprintf("Waiting %d s for %s's rate limit…", secs, host)
+	} else {
+		msg = fmt.Sprintf("%s is not answering; trying again in %d s…", host, secs)
+	}
+	s.publish(SyncEvent, models.SyncProgress{ID: id, Phase: "waiting", Current: msg})
 }
 
 func (s *Service) packwiz() *packwiz.Client {
@@ -141,6 +179,9 @@ func (s *Service) ListPacks() ([]models.Pack, error) {
 		if src.code != "" {
 			p.Code = core.Str(src.code)
 		}
+		if src.modrinth != nil {
+			p.Project, p.HeldVersion = core.Str(src.modrinth.Slug), core.Str(src.modrinth.Version)
+		}
 		out = append(out, p)
 	}
 	return out, nil
@@ -171,30 +212,81 @@ func (s *Service) describe(p manifest.Pack, minecraftDir string, st models.Setti
 	return out
 }
 
-func (s *Service) findPack(ctx context.Context, id string) (manifest.Pack, error) {
+func (s *Service) findSource(ctx context.Context, id string) (source, error) {
 	srcs, err := s.sources(ctx)
 	if err != nil {
-		return manifest.Pack{}, err
+		return source{}, err
 	}
 	for _, src := range srcs {
 		if src.pack.ID == id {
-			return src.pack, nil
+			return src, nil
 		}
 	}
-	return manifest.Pack{}, fmt.Errorf("pack %q is not in your packs", id)
+	return source{}, fmt.Errorf("pack %q is not in your packs", id)
+}
+
+func (s *Service) findPack(ctx context.Context, id string) (manifest.Pack, error) {
+	src, err := s.findSource(ctx, id)
+	return src.pack, err
+}
+
+// loaded is a source resolved to the files a sync installs.
+type loaded struct {
+	res *packwiz.Resolved
+	// packURL is what the state file records: pack.toml for a packwiz pack,
+	// the .mrpack file for a Modrinth version.
+	packURL string
+	// latest is the newest version the source offers, which for a Modrinth
+	// pack held at an older one differs from res.Pack.Version.
+	latest string
+}
+
+// load resolves a source: a packwiz pack to whatever it serves now, a
+// Modrinth pack to its held version.
+func (s *Service) load(ctx context.Context, src source) (loaded, error) {
+	if src.modrinth == nil {
+		res, err := s.packwiz().Load(ctx, src.pack.PackURL)
+		if err != nil {
+			return loaded{}, err
+		}
+		return loaded{res: res, packURL: src.pack.PackURL, latest: res.Pack.Version}, nil
+	}
+	mr := s.modrinth()
+	vs, err := mr.Versions(ctx, src.modrinth.ProjectID)
+	if err != nil {
+		return loaded{}, err
+	}
+	v, err := modrinth.Pick(vs, src.modrinth.Version)
+	if err != nil {
+		return loaded{}, err
+	}
+	f, err := v.Pack()
+	if err != nil {
+		return loaded{}, err
+	}
+	res, err := mr.Load(ctx, v)
+	if err != nil {
+		return loaded{}, err
+	}
+	latest := v.Number
+	if newest, err := modrinth.Newest(vs); err == nil {
+		latest = newest.Number
+	}
+	return loaded{res: res, packURL: f.URL, latest: latest}, nil
 }
 
 // CheckPack loads the pack and reports what a sync would do, without doing it.
 func (s *Service) CheckPack(id string) (models.PackCheck, error) {
 	ctx := context.Background()
-	p, err := s.findPack(ctx, id)
+	src, err := s.findSource(ctx, id)
 	if err != nil {
 		return models.PackCheck{}, err
 	}
-	res, err := s.packwiz().Load(ctx, p.PackURL)
+	ld, err := s.load(ctx, src)
 	if err != nil {
 		return models.PackCheck{}, err
 	}
+	res := ld.res
 	dir := PackDir(id)
 	state, err := packwiz.LoadState(dir)
 	if err != nil {
@@ -207,8 +299,9 @@ func (s *Service) CheckPack(id string) (models.PackCheck, error) {
 		return models.PackCheck{}, err
 	}
 	return models.PackCheck{
-		ID: id, LatestVersion: res.Pack.Version,
-		Minecraft: res.Pack.Versions["minecraft"], Loader: loader, LoaderVersion: loaderVersion,
+		ID: id, LatestVersion: ld.latest, TargetVersion: res.Pack.Version,
+		UpdateAvailable: ld.latest != res.Pack.Version,
+		Minecraft:       res.Pack.Versions["minecraft"], Loader: loader, LoaderVersion: loaderVersion,
 		VersionID:       versionID,
 		LoaderInstalled: launcher.HasVersion(minecraftDir(loadSettings()), versionID),
 		ToDownload:      len(plan.Download), ToDelete: len(plan.Delete),
@@ -221,15 +314,19 @@ func (s *Service) CheckPack(id string) (models.PackCheck, error) {
 // profile. Progress goes out on SyncEvent in three phases.
 func (s *Service) SyncPack(id string) (models.SyncReport, error) {
 	ctx := context.Background()
-	p, err := s.findPack(ctx, id)
+	s.syncing.Store(id)
+	defer s.syncing.Store("")
+	src, err := s.findSource(ctx, id)
 	if err != nil {
 		return models.SyncReport{}, err
 	}
+	p := src.pack
 	pw := s.packwiz()
-	res, err := pw.Load(ctx, p.PackURL)
+	ld, err := s.load(ctx, src)
 	if err != nil {
 		return models.SyncReport{}, err
 	}
+	res, packURL := ld.res, ld.packURL
 	dir := PackDir(id)
 	if err := appdir.EnsureDir(dir); err != nil {
 		return models.SyncReport{}, err
@@ -249,7 +346,7 @@ func (s *Service) SyncPack(id string) (models.SyncReport, error) {
 		return models.SyncReport{}, err
 	}
 	plan := packwiz.MakePlan(res, dir, state, nil)
-	rep, err := pw.Apply(ctx, res, dir, plan, p.PackURL, func(done, total int, e packwiz.Entry) {
+	rep, err := pw.Apply(ctx, res, dir, plan, packURL, func(done, total int, e packwiz.Entry) {
 		s.publish(SyncEvent, models.SyncProgress{ID: id, Phase: "files", Done: done, Total: total, Current: e.Name})
 	})
 	out := models.SyncReport{

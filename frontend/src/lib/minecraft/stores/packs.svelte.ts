@@ -1,10 +1,23 @@
 // Central state for the Minecraft module. Every backend call lives here;
 // components render and dispatch.
 import * as backend from '../backend';
-import type { Detected, LaunchSettings, Pack, PackCheck, Settings, SyncProgress, SyncReport } from '../types';
+import type {
+  Detected,
+  LaunchSettings,
+  ModrinthLookup,
+  ModrinthVersion,
+  Pack,
+  PackCheck,
+  Settings,
+  SyncProgress,
+  SyncReport
+} from '../types';
 import { toastError, toastInfo, toastSuccess } from '$lib/shell/stores/toasts.svelte';
 
 export const NO_PACKS = 'no packs yet';
+
+/** A pasted Modrinth link, as opposed to a pack code. Mirrors modrinth.ParseRef. */
+export const isModrinthLink = (input: string): boolean => /modrinth\.com\//i.test(input);
 
 class PacksStore {
   packs = $state<Pack[]>([]);
@@ -189,10 +202,68 @@ class PacksStore {
     }
   }
 
-  /** Forget a code. Files and the launcher profile stay where they are. */
-  async removeCode(code: string): Promise<boolean> {
+  /** Read a Modrinth link far enough to pick a version. Nothing is saved. */
+  async lookupModrinth(input: string): Promise<ModrinthLookup | null> {
     try {
-      await backend.removePackCode(code);
+      return await backend.lookupModrinth(input);
+    } catch (e) {
+      toastError('Could not look that pack up on Modrinth', e);
+      return null;
+    }
+  }
+
+  /** Add a Modrinth pack held at the chosen version. */
+  async addModrinth(input: string, version: string): Promise<Pack | null> {
+    try {
+      const p = await backend.addModrinthPack(input, version);
+      await this.loadPacks();
+      void this.check(p.id);
+      toastSuccess(`Added ${p.name}`, `Held at v${p.heldVersion ?? version}. Set the memory you want to give it, then Install.`);
+      return p;
+    } catch (e) {
+      toastError('Could not add that pack', e);
+      return null;
+    }
+  }
+
+  async listVersions(id: string): Promise<ModrinthVersion[] | null> {
+    try {
+      return await backend.listModrinthVersions(id);
+    } catch (e) {
+      toastError('Could not list versions on Modrinth', e);
+      return null;
+    }
+  }
+
+  /**
+   * Hold a Modrinth pack at another version. Only the choice is saved; the
+   * next sync installs it, so the caller usually follows with sync().
+   */
+  async setVersion(id: string, version: string): Promise<Pack | null> {
+    try {
+      const p = await backend.setModrinthVersion(id, version);
+      this.packs = this.packs.map((q) => (q.id === id ? { ...q, heldVersion: p.heldVersion } : q));
+      void this.check(id);
+      return p;
+    } catch (e) {
+      toastError('Could not change the version', e);
+      return null;
+    }
+  }
+
+  /** Hold at a version and install it straight away. */
+  async moveTo(id: string, version: string): Promise<SyncReport | null> {
+    const p = await this.setVersion(id, version);
+    if (!p) return null;
+    return this.sync(id);
+  }
+
+  /** Forget a code or Modrinth pack. Files and the launcher profile stay where they are. */
+  async remove(pack: Pack): Promise<boolean> {
+    try {
+      if (pack.source === 'modrinth') await backend.removeModrinthPack(pack.id);
+      else if (pack.code) await backend.removePackCode(pack.code);
+      else return false;
       await this.loadPacks();
       toastSuccess('Pack removed', 'Its files and launcher profile were left in place.');
       return true;
@@ -205,7 +276,7 @@ class PacksStore {
   /** First-run: save just the manifest URL and load. */
   async setManifestUrl(url: string): Promise<boolean> {
     return this.updateSettings({
-      ...(this.settings ?? { codes: [], manifestUrl: null, registryUrlOverride: null, minecraftDirOverride: null, packs: {} }),
+      ...(this.settings ?? { codes: [], modrinth: [], manifestUrl: null, registryUrlOverride: null, minecraftDirOverride: null, packs: {} }),
       manifestUrl: url
     });
   }

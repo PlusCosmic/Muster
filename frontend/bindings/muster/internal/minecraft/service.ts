@@ -16,6 +16,17 @@ import { Call as $Call, CancellablePromise as $CancellablePromise } from "@wails
 import * as models$0 from "./models/models.js";
 
 /**
+ * AddModrinthPack adds a Modrinth modpack from a pasted modrinth.com link,
+ * held at the given version number (or, when blank, the version the link
+ * names, else the newest release). The project is looked up, the version
+ * checked to exist, and both remembered. Adding a project already present
+ * moves it to the chosen version.
+ */
+export function AddModrinthPack(input: string, version: string): $CancellablePromise<models$0.Pack> {
+    return $Call.ByID(3994608401, input, version);
+}
+
+/**
  * AddPackCode resolves a code against the registry, remembers it, and returns
  * the pack. Entering a code already present just refreshes it.
  */
@@ -58,6 +69,14 @@ export function LauncherRunning(): $CancellablePromise<boolean> {
 }
 
 /**
+ * ListModrinthVersions lists the versions of an added Modrinth pack, newest
+ * first, for the version picker.
+ */
+export function ListModrinthVersions(id: string): $CancellablePromise<models$0.ModrinthVersion[] | null> {
+    return $Call.ByID(2878569274, id);
+}
+
+/**
  * ListPacks lists every pack from the user's codes and pack list, each paired
  * with its local state.
  */
@@ -66,10 +85,27 @@ export function ListPacks(): $CancellablePromise<models$0.Pack[] | null> {
 }
 
 /**
+ * LookupModrinth reads a pasted modrinth.com link far enough to show the
+ * pack and its versions, so the user can choose one before adding. Nothing
+ * is saved.
+ */
+export function LookupModrinth(input: string): $CancellablePromise<models$0.ModrinthLookup> {
+    return $Call.ByID(2926086829, input);
+}
+
+/**
  * OpenLauncher starts the official Minecraft launcher.
  */
 export function OpenLauncher(): $CancellablePromise<void> {
     return $Call.ByID(2445975174);
+}
+
+/**
+ * RemoveModrinthPack forgets a Modrinth pack by its pack id. Installed files
+ * and the launcher profile are left alone.
+ */
+export function RemoveModrinthPack(id: string): $CancellablePromise<void> {
+    return $Call.ByID(1959715574, id);
 }
 
 /**
@@ -96,6 +132,15 @@ export function ResetLaunchSettings(id: string): $CancellablePromise<models$0.La
  */
 export function SetLaunchSettings(id: string, ls: models$0.LaunchSettings): $CancellablePromise<models$0.LaunchSettings> {
     return $Call.ByID(3774357824, id, ls);
+}
+
+/**
+ * SetModrinthVersion holds an added Modrinth pack at another version (by
+ * number or id). Nothing is installed until the next sync; CheckPack then
+ * reports the move. Returns the pack.
+ */
+export function SetModrinthVersion(id: string, version: string): $CancellablePromise<models$0.Pack> {
+    return $Call.ByID(3678651665, id, version);
 }
 
 /**

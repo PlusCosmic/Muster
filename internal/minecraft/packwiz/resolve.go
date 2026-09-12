@@ -2,6 +2,7 @@ package packwiz
 
 import (
 	"fmt"
+	"io"
 	"net/url"
 	"path"
 	"strings"
@@ -10,9 +11,12 @@ import (
 // Entry is one file the pack wants on disk, with everything needed to fetch
 // and verify it. Path is slash-separated, relative to the install directory.
 type Entry struct {
-	Path       string
-	Name       string // display name (metafile name, or the path)
-	URL        string
+	Path string
+	Name string // display name (metafile name, or the path)
+	URL  string
+	// Mirrors are further URLs for the same bytes, tried in order when URL
+	// fails (an mrpack index may list several).
+	Mirrors    []string
 	HashFormat string
 	Hash       string
 	Optional   bool
@@ -24,6 +28,10 @@ type Entry struct {
 	// PageURL is where a person can get the file by hand when the download is
 	// refused: the CurseForge project page. Empty for direct downloads.
 	PageURL string
+	// Open, when set, supplies the file's bytes instead of URL: the file is
+	// carried inside the pack itself (an mrpack's overrides). Still hashed
+	// and recorded like a download.
+	Open func() (io.ReadCloser, error)
 }
 
 // Resolved is a pack read to the bottom: every client-side file as an Entry.
@@ -31,6 +39,26 @@ type Resolved struct {
 	Pack    Pack
 	BaseURL string // directory of pack.toml, with trailing slash
 	Entries []Entry
+
+	seen map[string]string // path -> what added it
+}
+
+// Add appends an entry, refusing one that would land on Muster's own state
+// file or on a path another entry already installs. from names the source
+// for the error message.
+func (r *Resolved) Add(e Entry, from string) error {
+	if e.Path == StateFile || e.Path == StateFile+".tmp" {
+		return fmt.Errorf("%s: %q is reserved for Muster's own state", from, e.Path)
+	}
+	if other, dup := r.seen[e.Path]; dup {
+		return fmt.Errorf("%s and %s both install %q", other, from, e.Path)
+	}
+	if r.seen == nil {
+		r.seen = map[string]string{}
+	}
+	r.seen[e.Path] = from
+	r.Entries = append(r.Entries, e)
+	return nil
 }
 
 // baseOf returns the directory part of a URL, with a trailing slash.
