@@ -219,7 +219,7 @@ Minecraft (`internal/minecraft/models/models.go`):
 Settings        { codes: PackCode[], modrinth: ModrinthPack[], manifestUrl?, registryUrlOverride?,
                   minecraftDirOverride?, packs: { [id]: LaunchSettings } }
 PackCode        { code, addedAtMs, pack: <manifest entry JSON, as last resolved> }
-ModrinthPack    { projectId, slug, version, addedAtMs, pack: <manifest entry JSON, as last resolved> }
+ModrinthPack    { projectId, slug, packId, version, addedAtMs, pack: <manifest entry JSON, as last resolved> }
 LaunchSettings  { maxMemoryMb, minMemoryMb?, args: string[], followRecommendedArgs }
 Detected        { manifestUrl?, registryUrl, minecraftDir?, launcherInstalled, packsDir, totalMemoryMb, maxHeapMb }
 Pack            { id, name, source: "code"|"modrinth"|"manifest", code?, project?, heldVersion?,
@@ -387,11 +387,13 @@ newest release) and `updateAvailable` when they differ; a packwiz pack's
 installed one makes the card's primary action "Install v<target>"; a
 sync at the held version with files missing is a "Repair".
 
-Settings keep `{ projectId, slug, version }` plus a cached manifest-shaped
-entry (`name`, `description`, `icon`, `pack` = the project page), so the
-pack stays listed offline just like a code. The pack id is
-`modrinth-<slug>` (slug reduced to `[a-z0-9-]`), fixed at add time so a
-rename on Modrinth does not orphan the install; lookups use the project id.
+Settings keep `{ projectId, slug, packId, version }` plus a cached
+manifest-shaped entry (`name`, `description`, `icon`, `pack` = the project
+page), so the pack stays listed offline just like a code. The pack id is
+`modrinth-<slug>` (slug reduced to `[a-z0-9-]`, which is lossy, so when
+another added pack's slug reduces the same the project id is appended),
+fixed at add time so a rename on Modrinth does not orphan the install;
+lookups use the project id.
 Modrinth versions carry no memory advice, so `recommended` is empty and the
 default heap applies.
 
@@ -400,9 +402,11 @@ one, download that version's primary `.mrpack`, verify it against the
 sha512 Modrinth publishes for it, and `modrinth.Resolve` it into the same
 `packwiz.Resolved` a packwiz pack becomes: one `Entry` per
 `modrinth.index.json` file whose `env.client` is not `unsupported`
-(`optional` ⇒ optional-but-default; the first download URL, which must be on
-a host the format allows — `cdn.modrinth.com`, `github.com`,
-`raw.githubusercontent.com`, `gitlab.com`; sha512, else sha1), and one per
+(`optional` ⇒ optional-but-default; every download URL on a host the
+format allows — `cdn.modrinth.com`, `github.com`,
+`raw.githubusercontent.com`, `gitlab.com` — the first as the URL and the
+rest as `Entry.Mirrors`, tried in order when it fails; sha512, else sha1),
+and one per
 file under `overrides/` and `client-overrides/` (the latter winning), hashed
 at load time and served from the archive in memory through `Entry.Open`.
 `minecraft` and the loader (`fabric-loader`/`quilt-loader`/`forge`/

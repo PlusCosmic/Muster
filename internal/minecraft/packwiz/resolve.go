@@ -11,9 +11,12 @@ import (
 // Entry is one file the pack wants on disk, with everything needed to fetch
 // and verify it. Path is slash-separated, relative to the install directory.
 type Entry struct {
-	Path       string
-	Name       string // display name (metafile name, or the path)
-	URL        string
+	Path string
+	Name string // display name (metafile name, or the path)
+	URL  string
+	// Mirrors are further URLs for the same bytes, tried in order when URL
+	// fails (an mrpack index may list several).
+	Mirrors    []string
 	HashFormat string
 	Hash       string
 	Optional   bool

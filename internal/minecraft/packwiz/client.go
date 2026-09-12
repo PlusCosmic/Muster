@@ -178,11 +178,28 @@ const downloadAttempts = 3
 // errTruncated marks a body that ended before its announced length.
 var errTruncated = errors.New("connection closed before the file was complete")
 
-// download streams an entry into a temp file beside dest while hashing it,
-// and renames it into place only if the hash matches. Nothing is held in
+// download fetches an entry from its URL, then from each mirror in turn
+// when that fails for any reason but a cancelled context: a mirror that is
+// down, refuses, or serves the wrong bytes is not the last word while
+// another is listed. Returns the byte count, or the last mirror's error.
+func (c *Client) download(ctx context.Context, e Entry, dest string) (int64, error) {
+	n, err := c.downloadFrom(ctx, e, dest)
+	for _, m := range e.Mirrors {
+		if err == nil || ctx.Err() != nil {
+			break
+		}
+		alt := e
+		alt.URL = m
+		n, err = c.downloadFrom(ctx, alt, dest)
+	}
+	return n, err
+}
+
+// downloadFrom streams an entry into a temp file beside dest while hashing
+// it, and renames it into place only if the hash matches. Nothing is held in
 // memory, so a multi-gigabyte resource pack costs no more than a small jar.
 // Returns the byte count.
-func (c *Client) download(ctx context.Context, e Entry, dest string) (int64, error) {
+func (c *Client) downloadFrom(ctx context.Context, e Entry, dest string) (int64, error) {
 	var n int64
 	var err error
 	for attempt := 0; attempt < downloadAttempts; attempt++ {

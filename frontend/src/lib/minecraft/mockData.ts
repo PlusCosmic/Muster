@@ -4,7 +4,7 @@ import type { Detected, LaunchSettings, ModrinthLookup, ModrinthVersion, Pack, P
 const HOUR = 3_600_000;
 let settings: Settings = {
   codes: [{ code: 'plum-weasel-23', addedAtMs: Date.now() - 3 * HOUR, pack: null }],
-  modrinth: [{ projectId: '1KVo5zza', slug: 'fabulously-optimized', version: '13.4.0', addedAtMs: Date.now() - HOUR, pack: null }],
+  modrinth: [{ projectId: '1KVo5zza', slug: 'fabulously-optimized', packId: 'modrinth-fabulously-optimized', version: '13.4.0', addedAtMs: Date.now() - HOUR, pack: null }],
   manifestUrl: 'https://packs.example.com/manifest.json',
   registryUrlOverride: null,
   minecraftDirOverride: null,
@@ -233,7 +233,7 @@ export const mockApi = {
     const want = version || (m[2] ? decodeURIComponent(m[2]) : '');
     const v = want ? FO_VERSIONS.find((x) => x.number === want || x.id === want) : FO_VERSIONS.find((x) => x.type === 'release');
     if (!v) throw new Error(`the project has no version "${want}"`);
-    settings.modrinth = [{ projectId: '1KVo5zza', slug: 'fabulously-optimized', version: v.number, addedAtMs: settings.modrinth[0]?.addedAtMs ?? Date.now(), pack: null }];
+    settings.modrinth = [{ projectId: '1KVo5zza', slug: 'fabulously-optimized', packId: 'modrinth-fabulously-optimized', version: v.number, addedAtMs: settings.modrinth[0]?.addedAtMs ?? Date.now(), pack: null }];
     return packs()[2];
   },
   listModrinthVersions: async (id: string): Promise<ModrinthVersion[]> => {
@@ -250,7 +250,7 @@ export const mockApi = {
     return packs()[2];
   },
   removeModrinthPack: async (id: string): Promise<void> => {
-    settings.modrinth = settings.modrinth.filter((m) => `modrinth-${m.slug}` !== id);
+    settings.modrinth = settings.modrinth.filter((m) => m.packId !== id);
   },
   getLaunchSettings: async (id: string): Promise<LaunchSettings> => launchFor(id).launch,
   setLaunchSettings: async (id: string, ls: LaunchSettings): Promise<LaunchSettings> => {

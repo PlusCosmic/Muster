@@ -38,7 +38,8 @@ func (s *Service) modrinth() *modrinth.Client {
 }
 
 // modrinthPackID names a Modrinth pack: "modrinth-" plus the slug reduced to
-// what a pack id may contain.
+// what a pack id may contain. Lossy (`a__b` and `a-b` meet), so
+// uniqueModrinthPackID is what gets stored.
 func modrinthPackID(slug string) string {
 	var b strings.Builder
 	b.WriteString("modrinth-")
@@ -60,12 +61,24 @@ func modrinthPackID(slug string) string {
 	return id
 }
 
+// uniqueModrinthPackID is modrinthPackID unless another added project
+// already reduces to it, in which case the project id is appended.
+func uniqueModrinthPackID(slug, projectID string, others []models.ModrinthPack) string {
+	id := modrinthPackID(slug)
+	for _, o := range others {
+		if o.ProjectID != projectID && o.PackID == id {
+			return id + "-" + strings.ToLower(projectID)
+		}
+	}
+	return id
+}
+
 // modrinthEntry is the manifest-shaped description of a Modrinth project:
 // what the pack list shows, with the page as the pack URL. Nothing to
 // recommend: Modrinth versions carry no memory advice.
-func modrinthEntry(slug string, p modrinth.Project) manifest.Pack {
+func modrinthEntry(id string, p modrinth.Project) manifest.Pack {
 	return manifest.Pack{
-		ID: modrinthPackID(slug), Name: p.Title, Description: p.Description, Icon: p.IconURL,
+		ID: id, Name: p.Title, Description: p.Description, Icon: p.IconURL,
 		PackURL: p.PageURL(), Recommended: manifest.Recommended{Args: []string{}},
 	}
 }
@@ -144,7 +157,7 @@ func (s *Service) sources(ctx context.Context) ([]source, error) {
 			m := &st.Modrinth[i]
 			var p manifest.Pack
 			if fresh[i] != nil {
-				p = modrinthEntry(m.Slug, *fresh[i])
+				p = modrinthEntry(m.PackID, *fresh[i])
 				if raw, err := json.Marshal(p); err == nil && string(raw) != string(m.Pack) {
 					m.Pack = raw
 					changed = true
@@ -330,12 +343,13 @@ func (s *Service) AddModrinthPack(input, version string) (models.Pack, error) {
 	}
 	st := loadSettings()
 	entry := models.ModrinthPack{ProjectID: proj.ID, Slug: proj.Slug, Version: v.Number, AddedAtMs: time.Now().UnixMilli()}
+	entry.PackID = uniqueModrinthPackID(proj.Slug, proj.ID, st.Modrinth)
 	for _, m := range st.Modrinth {
 		if m.ProjectID == proj.ID {
-			entry.Slug, entry.AddedAtMs = m.Slug, m.AddedAtMs
+			entry.Slug, entry.PackID, entry.AddedAtMs = m.Slug, m.PackID, m.AddedAtMs
 		}
 	}
-	p := modrinthEntry(entry.Slug, proj)
+	p := modrinthEntry(entry.PackID, proj)
 	if entry.Pack, err = json.Marshal(p); err != nil {
 		return models.Pack{}, err
 	}
@@ -423,7 +437,7 @@ func (s *Service) RemoveModrinthPack(id string) error {
 	kept := st.Modrinth[:0]
 	found := false
 	for _, m := range st.Modrinth {
-		if modrinthPackID(m.Slug) == id {
+		if m.PackID == id {
 			found = true
 			continue
 		}
