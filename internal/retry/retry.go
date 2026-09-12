@@ -218,10 +218,12 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 				if lastResp.StatusCode == http.StatusTooManyRequests {
 					why = "rate limit"
 				}
-				lastResp.Body.Close()
 			}
 			if !wait(d, why) {
-				break
+				break // lastResp goes back to the caller, body intact
+			}
+			if lastResp != nil {
+				lastResp.Body.Close()
 			}
 			lastResp, lastErr = nil, nil
 		}

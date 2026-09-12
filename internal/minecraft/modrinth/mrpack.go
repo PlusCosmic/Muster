@@ -125,13 +125,19 @@ func entryOf(f IndexEntry) (packwiz.Entry, error) {
 	if len(f.Downloads) == 0 {
 		return packwiz.Entry{}, fmt.Errorf("%s: no download url", f.Path)
 	}
-	dl := f.Downloads[0]
-	u, err := url.Parse(dl)
-	if err != nil || u.Scheme != "https" || !downloadHosts[strings.ToLower(u.Hostname())] {
-		return packwiz.Entry{}, fmt.Errorf("%s: download from %q is not allowed by the mrpack format", f.Path, dl)
+	// Every URL on an allowed host is kept, in the index's order, so a
+	// mirror that is down or missing does not fail the file.
+	var urls []string
+	for _, dl := range f.Downloads {
+		if u, err := url.Parse(dl); err == nil && u.Scheme == "https" && downloadHosts[strings.ToLower(u.Hostname())] {
+			urls = append(urls, dl)
+		}
+	}
+	if len(urls) == 0 {
+		return packwiz.Entry{}, fmt.Errorf("%s: no download from a host the mrpack format allows (%s)", f.Path, strings.Join(f.Downloads, ", "))
 	}
 	return packwiz.Entry{
-		Path: f.Path, Name: path.Base(f.Path), URL: dl,
+		Path: f.Path, Name: path.Base(f.Path), URL: urls[0], Mirrors: urls[1:],
 		HashFormat: format, Hash: hash,
 		Optional: f.Optional(), Default: true,
 	}, nil

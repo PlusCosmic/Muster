@@ -469,3 +469,33 @@ func TestDownloadRetriesATruncatedBodyButNotAWrongHash(t *testing.T) {
 		t.Fatalf("a complete body with the wrong hash must fail once: %v hits=%d", err, hits)
 	}
 }
+
+func TestDownloadFallsBackToMirrors(t *testing.T) {
+	jar := []byte("mirrored jar")
+	jh, _ := HashBytes("sha256", jar)
+	var paths []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		paths = append(paths, r.URL.Path)
+		switch r.URL.Path {
+		case "/down.jar":
+			w.WriteHeader(404)
+		case "/wrong.jar":
+			_, _ = w.Write([]byte("not the jar"))
+		case "/good.jar":
+			_, _ = w.Write(jar)
+		}
+	}))
+	defer srv.Close()
+	c := &Client{HTTP: srv.Client()}
+	dir := t.TempDir()
+	e := Entry{Path: "mods/m.jar", URL: srv.URL + "/down.jar", Mirrors: []string{srv.URL + "/wrong.jar", srv.URL + "/good.jar"}, HashFormat: "sha256", Hash: jh}
+	n, err := c.download(context.Background(), e, filepath.Join(dir, "m.jar"))
+	if err != nil || n != int64(len(jar)) || strings.Join(paths, " ") != "/down.jar /wrong.jar /good.jar" {
+		t.Fatalf("%d %v %v", n, err, paths)
+	}
+	paths = nil
+	e.Mirrors = []string{srv.URL + "/wrong.jar"}
+	if _, err := c.download(context.Background(), e, filepath.Join(dir, "m2.jar")); err == nil || !strings.Contains(err.Error(), "mismatch") {
+		t.Fatalf("every mirror failing reports the last error: %v (%v)", err, paths)
+	}
+}

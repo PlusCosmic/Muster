@@ -98,7 +98,7 @@ func TestResolveTurnsIndexAndOverridesIntoEntries(t *testing.T) {
 	raw := buildPack(t, index([]IndexEntry{
 		{Path: "mods/alpha.jar", Hashes: map[string]string{"sha1": "aa", "sha512": "ff"}, Env: &Env{Client: "required", Server: "required"}, Downloads: []string{"https://cdn.modrinth.com/data/x/alpha.jar"}},
 		{Path: "mods/server-only.jar", Hashes: map[string]string{"sha512": "ff"}, Env: &Env{Client: "unsupported", Server: "required"}, Downloads: []string{"https://cdn.modrinth.com/data/x/s.jar"}},
-		{Path: "mods/maybe.jar", Hashes: map[string]string{"sha1": "aa"}, Env: &Env{Client: "optional", Server: "optional"}, Downloads: []string{"https://github.com/x/y/releases/maybe.jar"}},
+		{Path: "mods/maybe.jar", Hashes: map[string]string{"sha1": "aa"}, Env: &Env{Client: "optional", Server: "optional"}, Downloads: []string{"https://evil.example/maybe.jar", "https://github.com/x/y/releases/maybe.jar", "https://cdn.modrinth.com/maybe.jar"}},
 	}), map[string]string{
 		"overrides/":                         "",
 		"overrides/config/a.toml":            "base",
@@ -127,8 +127,8 @@ func TestResolveTurnsIndexAndOverridesIntoEntries(t *testing.T) {
 	if e := byPath["mods/alpha.jar"]; e.HashFormat != "sha512" || e.Hash != "ff" || e.URL == "" || e.Optional || e.Open != nil {
 		t.Fatalf("alpha: %+v", e)
 	}
-	if e := byPath["mods/maybe.jar"]; e.HashFormat != "sha1" || !e.Optional || !e.Default {
-		t.Fatalf("maybe: %+v", e)
+	if e := byPath["mods/maybe.jar"]; e.HashFormat != "sha1" || !e.Optional || !e.Default || e.URL != "https://github.com/x/y/releases/maybe.jar" || len(e.Mirrors) != 1 || e.Mirrors[0] != "https://cdn.modrinth.com/maybe.jar" {
+		t.Fatalf("maybe: disallowed hosts dropped, the rest kept in order: %+v", e)
 	}
 	if _, ok := byPath["mods/server-only.jar"]; ok {
 		t.Fatal("server-only file resolved")
@@ -165,7 +165,7 @@ func TestResolveRefusesBadPacks(t *testing.T) {
 		"no index":             buildPack(t, nil, map[string]string{"overrides/x": "y"})[:0],
 		"escaping index path":  buildPack(t, index([]IndexEntry{{Path: "../a.jar", Hashes: map[string]string{"sha512": "ff"}, Downloads: []string{"https://cdn.modrinth.com/a.jar"}}}), nil),
 		"escaping override":    buildPack(t, index(good), map[string]string{"overrides/../evil": "x"}),
-		"disallowed host":      buildPack(t, index([]IndexEntry{{Path: "mods/a.jar", Hashes: map[string]string{"sha512": "ff"}, Downloads: []string{"https://evil.example/a.jar"}}}), nil),
+		"disallowed host":      buildPack(t, index([]IndexEntry{{Path: "mods/a.jar", Hashes: map[string]string{"sha512": "ff"}, Downloads: []string{"https://evil.example/a.jar", "http://cdn.modrinth.com/a.jar"}}}), nil),
 		"no hash":              buildPack(t, index([]IndexEntry{{Path: "mods/a.jar", Downloads: []string{"https://cdn.modrinth.com/a.jar"}}}), nil),
 		"collision with state": buildPack(t, index(good), map[string]string{"overrides/" + packwiz.StateFile: "x"}),
 		"duplicate path":       buildPack(t, index(append(good, good[0])), nil),

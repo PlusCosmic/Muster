@@ -380,6 +380,12 @@ func fakeModrinth(t *testing.T, srvURL func() string) (http.Handler, map[string]
 			})
 		case "/v2/project/some-mod":
 			_ = json.NewEncoder(w).Encode(map[string]any{"id": "m", "slug": "some-mod", "title": "Some Mod", "project_type": "mod"})
+		case "/v2/project/a-b-c", "/v2/project/P1":
+			_ = json.NewEncoder(w).Encode(map[string]any{"id": "P1", "slug": "a-b-c", "title": "ABC One", "project_type": "modpack"})
+		case "/v2/project/a__b..c", "/v2/project/P2":
+			_ = json.NewEncoder(w).Encode(map[string]any{"id": "P2", "slug": "a__b..c", "title": "ABC Two", "project_type": "modpack"})
+		case "/v2/project/P1/version", "/v2/project/P2/version":
+			_ = json.NewEncoder(w).Encode([]map[string]any{version("x1", "1.0", "release", "2026-01-01T00:00:00Z", "1.0.mrpack")})
 		default:
 			w.WriteHeader(404)
 			_, _ = w.Write([]byte(`{"error":"not_found","description":"no"}`))
@@ -526,6 +532,30 @@ func TestModrinthPacks(t *testing.T) {
 	}
 	if p, err = svc.SetModrinthVersion("modrinth-fancy-pack", "1.0"); err != nil || *p.HeldVersion != "1.0" {
 		t.Fatalf("%+v %v", p, err)
+	}
+
+	// Two projects whose slugs reduce to the same id both get listed, the
+	// second under an id carrying its project id, and removing one leaves
+	// the other.
+	one, err := svc.AddModrinthPack("https://modrinth.com/modpack/a-b-c", "")
+	if err != nil || one.ID != "modrinth-a-b-c" {
+		t.Fatalf("%+v %v", one, err)
+	}
+	two, err := svc.AddModrinthPack("https://modrinth.com/modpack/a__b..c", "")
+	if err != nil || two.ID != "modrinth-a-b-c-p2" || *two.Project != "a__b..c" {
+		t.Fatalf("%+v %v", two, err)
+	}
+	if packs, _ = svc.ListPacks(); len(packs) != 3 {
+		t.Fatalf("%+v", packs)
+	}
+	if err := svc.RemoveModrinthPack("modrinth-a-b-c"); err != nil {
+		t.Fatal(err)
+	}
+	if packs, _ = svc.ListPacks(); len(packs) != 2 || packs[1].ID != "modrinth-a-b-c-p2" {
+		t.Fatalf("%+v", packs)
+	}
+	if err := svc.RemoveModrinthPack("modrinth-a-b-c-p2"); err != nil {
+		t.Fatal(err)
 	}
 
 	// Modrinth down: the pack stays listed from its cached copy.

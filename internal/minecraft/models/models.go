@@ -37,10 +37,14 @@ type PackCode struct {
 type ModrinthPack struct {
 	// ProjectID is Modrinth's stable id for the project; lookups use it.
 	ProjectID string `json:"projectId"`
-	// Slug is the project's slug when it was added; it names the pack
-	// (`modrinth-<slug>`) and so the install directory, and stays put even
-	// if the project is renamed on Modrinth.
+	// Slug is the project's slug when it was added, for display.
 	Slug string `json:"slug"`
+	// PackID is the pack's id (and so its install directory and launcher
+	// profile): `modrinth-<slug>` with the slug reduced to [a-z0-9-], plus
+	// the project id when another added pack's slug reduces the same.
+	// Fixed at add time, so a rename on Modrinth does not orphan the
+	// install.
+	PackID string `json:"packId"`
 	// Version is the version number the pack is held at. A sync installs
 	// exactly this; it only changes when the user picks another (or takes
 	// an update), never because Modrinth published one.

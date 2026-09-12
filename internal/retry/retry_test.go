@@ -122,12 +122,20 @@ func TestWaitBudgetIsNotExceeded(t *testing.T) {
 		hits.Add(1)
 		w.Header().Set("Retry-After", "600")
 		w.WriteHeader(429)
+		_, _ = w.Write([]byte("slow down"))
 	}))
 	defer srv.Close()
 	rec := &recorder{}
-	resp, err := get(t, newTransport(rec), srv.URL)
+	req, _ := http.NewRequest(http.MethodGet, srv.URL, nil)
+	resp, err := newTransport(rec).RoundTrip(req)
 	if err != nil || resp.StatusCode != 429 || hits.Load() != 1 || len(rec.waits) != 0 {
 		t.Fatalf("a 10-minute wait must not be taken: %v %v hits=%d waits=%v", resp, err, hits.Load(), rec.waits)
+	}
+	// The abandoned response is handed back with its body still readable.
+	body, err := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if err != nil || string(body) != "slow down" {
+		t.Fatalf("body after abandoning the retry: %q %v", body, err)
 	}
 }
 

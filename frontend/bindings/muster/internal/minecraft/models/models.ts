@@ -119,11 +119,18 @@ export interface ModrinthPack {
     "projectId": string;
 
     /**
-     * Slug is the project's slug when it was added; it names the pack
-     * (`modrinth-<slug>`) and so the install directory, and stays put even
-     * if the project is renamed on Modrinth.
+     * Slug is the project's slug when it was added, for display.
      */
     "slug": string;
+
+    /**
+     * PackID is the pack's id (and so its install directory and launcher
+     * profile): `modrinth-<slug>` with the slug reduced to [a-z0-9-], plus
+     * the project id when another added pack's slug reduces the same.
+     * Fixed at add time, so a rename on Modrinth does not orphan the
+     * install.
+     */
+    "packId": string;
 
     /**
      * Version is the version number the pack is held at. A sync installs
