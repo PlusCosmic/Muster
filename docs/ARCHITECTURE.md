@@ -12,9 +12,10 @@ plus one **game module** per game:
   `Scenarios/`. Installed mods (Steam Workshop + game `Mods/` + official
   Core/DLC) are shared between profiles; only the *active list* and settings
   differ.
-- **Minecraft**: shared packwiz modpacks pulled from a *manifest*, installed
-  into their own directories, and offered to the official Minecraft launcher
-  as profiles. The launcher does auth, Java, assets and the actual launch; we
+- **Minecraft**: shared modpacks — packwiz packs reached by a *pack code* or
+  a *manifest*, and Modrinth modpacks added by link — installed into their
+  own directories and offered to the official Minecraft launcher as
+  profiles. The launcher does auth, Java, assets and the actual launch; we
   do the pack.
 
 Muster is the renamed and widened successor of RimForge, which was RimWorld
@@ -90,7 +91,7 @@ is unset, and the directory it names is migrated in place.
     cache/communityRules.json # cached RimSort community rules DB
     cache/rules_meta.json     # { fetchedAtMs, etag? }
   minecraft/                  # Minecraft game root (internal/minecraft)
-    settings.json             # manifest + .minecraft overrides
+    settings.json             # codes, Modrinth packs, manifest + .minecraft overrides
     packs/<id>/               # one install per pack = its launcher profile's gameDir
       muster-pack.json        # what the last sync put there (packwiz.StateFile)
     java/jre-21/              # Temurin JRE, only when no usable Java was found
@@ -169,9 +170,14 @@ Each game's `frontend/src/lib/<game>/types.ts` narrows the generated
 | `GetSettings` | — | `Settings` | |
 | `UpdateSettings` | `settings: Settings` | `Settings` | persists overrides |
 | `Detect` | — | `Detected` | effective manifest URL, `.minecraft`, launcher presence |
-| `ListPacks` | — | `Pack[]` | every pack from the user's codes (re-resolved, cached copy if the registry is down) and pack list, + local install state |
+| `ListPacks` | — | `Pack[]` | every pack from the user's codes and Modrinth links (each re-resolved, cached copy if its source is down) and pack list, + local install state |
 | `AddPackCode` | `input` | `Pack` | normalise a typed code / pasted link, resolve it against the registry, remember it |
 | `RemovePackCode` | `code` | — | forget a code; files and launcher profile stay |
+| `LookupModrinth` | `input` | `ModrinthLookup` | read a pasted modrinth.com link: the project and its versions, for the picker; saves nothing |
+| `AddModrinthPack` | `input, version` | `Pack` | add the link's project held at `version` (blank ⇒ the link's version, else the newest release) |
+| `ListModrinthVersions` | `id` | `ModrinthVersion[]` | an added pack's versions, newest first |
+| `SetModrinthVersion` | `id, version` | `Pack` | hold the pack at another version (number or id); installed on the next sync |
+| `RemoveModrinthPack` | `id` | — | forget a Modrinth pack by pack id; files and launcher profile stay |
 | `CheckPack` | `id` | `PackCheck` | loads the pack, plans a sync, reports counts; writes nothing |
 | `SyncPack` | `id` | `SyncReport` | download/delete to match the pack, install the loader if the launcher lacks it, then write the launcher profile; emits `minecraft:sync` (`SyncProgress`) per file and per loader step |
 | `GetLaunchSettings` | `id` | `LaunchSettings` | what the pack launches with on this machine |
@@ -210,18 +216,23 @@ RulesDbStatus   { cached: bool, fetchedAtMs?, ruleCount }
 Minecraft (`internal/minecraft/models/models.go`):
 
 ```
-Settings        { codes: PackCode[], manifestUrl?, registryUrlOverride?, minecraftDirOverride?,
-                  packs: { [id]: LaunchSettings } }
+Settings        { codes: PackCode[], modrinth: ModrinthPack[], manifestUrl?, registryUrlOverride?,
+                  minecraftDirOverride?, packs: { [id]: LaunchSettings } }
 PackCode        { code, addedAtMs, pack: <manifest entry JSON, as last resolved> }
+ModrinthPack    { projectId, slug, packId, version, addedAtMs, pack: <manifest entry JSON, as last resolved> }
 LaunchSettings  { maxMemoryMb, minMemoryMb?, args: string[], followRecommendedArgs }
 Detected        { manifestUrl?, registryUrl, minecraftDir?, launcherInstalled, packsDir, totalMemoryMb, maxHeapMb }
-Pack            { id, name, source: "code"|"manifest", code?, description, icon?, packUrl, server?,
+Pack            { id, name, source: "code"|"modrinth"|"manifest", code?, project?, heldVersion?,
+                  description, icon?, packUrl, server?,
                   recommendedMinMemoryMb, recommendedMaxMemoryMb, recommendedArgs: string[],
                   launch: LaunchSettings, launchCustomised,
                   installDir, installed, installedVersion?, syncedAtMs?, profileWritten }
-PackCheck       { id, latestVersion, minecraft, loader, loaderVersion, versionId,
-                  loaderInstalled, toDownload, toDelete, upToDate }
-SyncProgress    { id, phase: "files"|"loader"|"profile", done, total, current }   (event payload)
+PackCheck       { id, latestVersion, targetVersion, updateAvailable, minecraft, loader, loaderVersion,
+                  versionId, loaderInstalled, toDownload, toDelete, upToDate }
+ModrinthVersion { id, number, type: "release"|"beta"|"alpha", publishedAtMs, gameVersions: string[], loaders: string[] }
+ModrinthLookup  { project, input, name, description, icon?, pageUrl, versions: ModrinthVersion[], suggested,
+                  alreadyAdded, heldVersion? }
+SyncProgress    { id, phase: "files"|"loader"|"profile"|"waiting", done, total, current }   (event payload)
 Manual          { path, name, url, why }
 SyncReport      { id, version, downloaded: string[], deleted: string[], manual: Manual[],
                   profileWritten, loaderInstalled, versionId, launcherOpen }
@@ -322,7 +333,7 @@ Input: the active id list. Output: sorted list + warnings. Pure — does not wri
 ## Minecraft module
 
 Go packages under `internal/minecraft/`: `registry` (pack codes),
-`manifest` (the pack list),
+`manifest` (the pack list), `modrinth` (Modrinth API + `.mrpack` reader),
 `packwiz` (pack format, hashing, download resolution, sync planner/applier),
 `launcher` (`.minecraft` location, `launcher_profiles.json` merge-writes,
 opening the launcher), `loader` (installing a loader into the launcher),
@@ -349,6 +360,61 @@ validated exactly like a manifest entry and stored with the code in
 is unreachable; `ListPacks` re-resolves every code (8 s budget, in parallel)
 and refreshes the stored copies. Codes come first in the list; a manifest
 pack with the same id is hidden. Removing a code only delists the pack.
+
+### Modrinth packs
+
+Any modpack published on Modrinth can be added by pasting its page link:
+`https://modrinth.com/modpack/<slug>`, or `…/version/<number>` to
+preselect one version. `modrinth.ParseRef` recognises modrinth.com links
+(the frontend sends anything else to `AddPackCode`); the project is fetched
+from `api.modrinth.com/v2` and must be a modpack.
+
+**Versioning is the opposite of a packwiz pack's.** A packwiz pack is a
+feed: whatever `pack.toml` serves is what a sync installs, which suits a
+group that wants everyone on the latest. A Modrinth pack is *held* at one
+version: `AddModrinthPack` stores a version number (the one the user picked
+in the version picker the frontend opens from `LookupModrinth`; blank ⇒ the
+link's version, else the newest `release`, or the newest of anything when
+the project has never published a release), a sync installs exactly that
+version, and nothing moves until the user chooses another with
+`SetModrinthVersion` (the card's "Change version…", listing
+`ListModrinthVersions` with betas and alphas behind a toggle) or takes the
+offered update. So an older version can be chosen deliberately, say to
+match a server, and stays put across syncs. `CheckPack` reports
+`targetVersion` (the held one, what a sync installs), `latestVersion` (the
+newest release) and `updateAvailable` when they differ; a packwiz pack's
+`targetVersion` equals its `latestVersion`. A held version other than the
+installed one makes the card's primary action "Install v<target>"; a
+sync at the held version with files missing is a "Repair".
+
+Settings keep `{ projectId, slug, packId, version }` plus a cached
+manifest-shaped entry (`name`, `description`, `icon`, `pack` = the project
+page), so the pack stays listed offline just like a code. The pack id is
+`modrinth-<slug>` (slug reduced to `[a-z0-9-]`, which is lossy, so when
+another added pack's slug reduces the same the project id is appended),
+fixed at add time so a rename on Modrinth does not orphan the install;
+lookups use the project id.
+Modrinth versions carry no memory advice, so `recommended` is empty and the
+default heap applies.
+
+Check and sync (`Service.load`) list the project's versions, take the held
+one, download that version's primary `.mrpack`, verify it against the
+sha512 Modrinth publishes for it, and `modrinth.Resolve` it into the same
+`packwiz.Resolved` a packwiz pack becomes: one `Entry` per
+`modrinth.index.json` file whose `env.client` is not `unsupported`
+(`optional` ⇒ optional-but-default; every download URL on a host the
+format allows — `cdn.modrinth.com`, `github.com`,
+`raw.githubusercontent.com`, `gitlab.com` — the first as the URL and the
+rest as `Entry.Mirrors`, tried in order when it fails; sha512, else sha1),
+and one per
+file under `overrides/` and `client-overrides/` (the latter winning), hashed
+at load time and served from the archive in memory through `Entry.Open`.
+`minecraft` and the loader (`fabric-loader`/`quilt-loader`/`forge`/
+`neoforge`) come from the index's `dependencies`; `versionId` is the version
+number the state records. From there the plan, apply, loader install and
+launcher profile are shared with packwiz packs; the state's `packUrl` is the
+`.mrpack` file URL. Overrides are not `preserve`d: an edited config whose
+upstream copy changed is overwritten on the next sync, as packwiz's are.
 
 ### Manifest
 
@@ -378,6 +444,10 @@ read as the same thing): see "Launch settings" below.
 
 ### Sync
 
+Either source ends in a `packwiz.Resolved`: the pack's name, version and
+`[versions]`, and every client-side file as an `Entry` (path, URL or
+in-archive `Open`, hash). Everything below is shared.
+
 `packwiz.Client.Load` reads `pack.toml` → `index.toml` (hash-verified against
 pack.toml) → every `.pw.toml` (hash-verified against the index), keeping only
 client-side files (`side` = both/client). Download URLs are the metafile's
@@ -403,6 +473,25 @@ each download through the hash into a temp file beside its target and writes
 the state after every file, so an interrupted sync resumes exactly. A
 CurseForge refusal is reported with the project page URL, not the failed CDN
 link.
+
+### Network resilience
+
+Every request the module makes — registry, manifest, Modrinth API, pack
+files, mod downloads, loader installers, the Temurin JRE — goes through one
+`http.Client` whose transport is `internal/retry.Transport`, so a pack
+install takes longer rather than failing partway. For GET/HEAD it: sleeps
+out a 429 for `Retry-After` (seconds or date) or `X-Ratelimit-Reset`;
+retries 5xx and connection errors with exponential, jittered backoff (up
+to 5 attempts, at most 90 s of waiting per request); and, when a response
+says `X-Ratelimit-Remaining` is down to a small reserve (3), pauses every
+later request to that host until `X-Ratelimit-Reset` — which is what
+Modrinth's API sends (300 requests a minute) — so the 429 never happens.
+The transport is shared across callers so one pause covers all of them.
+A download cut off mid-body (short read, or fewer bytes than
+`Content-Length`) is retried by `packwiz.Client.download` up to three
+times; a complete body with the wrong hash is not. While waiting during a
+sync, `SyncProgress{phase: "waiting", current: "Waiting 14 s for
+api.modrinth.com's rate limit…"}` keeps the card honest.
 
 ### Loader install
 
@@ -489,7 +578,7 @@ already exists, i.e. whether a sync would need to install it.
 - **RimWorld backend**: `internal/rimworld/{paths,settings,profiles,launch,mods}`.
 - **RimWorld frontend**: `frontend/src/lib/rimworld/` (except `types.ts`,
   `api.ts`) and `frontend/src/routes/rimworld/`.
-- **Minecraft backend**: `internal/minecraft/{manifest,packwiz,launcher,loader,java,machine}`
+- **Minecraft backend**: `internal/minecraft/{manifest,registry,modrinth,packwiz,launcher,loader,java,machine}`
   and the non-service files in `internal/minecraft/`.
 - **Minecraft frontend**: `frontend/src/lib/minecraft/` (except `types.ts`,
   `api.ts`) and `frontend/src/routes/minecraft/`.

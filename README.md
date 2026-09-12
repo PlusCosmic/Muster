@@ -6,7 +6,7 @@ with friends and keeping them in sync. One shell, one game module per game:
 - **RimWorld**: profiles — isolated `-savedatafolder` directories, each with its
   own mod list, mod settings and saves, sharing one installed game and Workshop
   library — with a mod list editor and RimSort-style auto-sort.
-- **Minecraft**: enter a pack code (or a pack list URL) to get a shared packwiz
+- **Minecraft**: enter a pack code, paste a Modrinth modpack link, or set a pack list URL to get a shared
   modpack; Muster syncs it into its own directory, installs its mod loader into
   the official Minecraft launcher, and registers it there as a profile. Memory
   and JVM args are the pack's recommendation, tuned per machine. One Install

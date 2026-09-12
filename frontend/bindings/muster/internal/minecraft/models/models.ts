@@ -80,6 +80,91 @@ export interface Manual {
 }
 
 /**
+ * ModrinthLookup is what a pasted Modrinth link points at, before it is
+ * added: enough to show the pack and pick a version.
+ */
+export interface ModrinthLookup {
+    /**
+     * Project is the slug; Input is the link as pasted, to hand back to
+     * AddModrinthPack.
+     */
+    "project": string;
+    "input": string;
+    "name": string;
+    "description": string;
+    "icon": string | null;
+    "pageUrl": string;
+
+    /**
+     * Versions, newest first. Suggested is the one preselected: the link's
+     * version when it named one, else the newest release.
+     */
+    "versions": ModrinthVersion[] | null;
+    "suggested": string;
+
+    /**
+     * AlreadyAdded: this project is in the list already (at HeldVersion).
+     */
+    "alreadyAdded": boolean;
+    "heldVersion": string | null;
+}
+
+/**
+ * ModrinthPack is one Modrinth modpack the user added.
+ */
+export interface ModrinthPack {
+    /**
+     * ProjectID is Modrinth's stable id for the project; lookups use it.
+     */
+    "projectId": string;
+
+    /**
+     * Slug is the project's slug when it was added, for display.
+     */
+    "slug": string;
+
+    /**
+     * PackID is the pack's id (and so its install directory and launcher
+     * profile): `modrinth-<slug>` with the slug reduced to [a-z0-9-], plus
+     * the project id when another added pack's slug reduces the same.
+     * Fixed at add time, so a rename on Modrinth does not orphan the
+     * install.
+     */
+    "packId": string;
+
+    /**
+     * Version is the version number the pack is held at. A sync installs
+     * exactly this; it only changes when the user picks another (or takes
+     * an update), never because Modrinth published one.
+     */
+    "version": string;
+    "addedAtMs": number;
+
+    /**
+     * Pack is the project as last seen, in the manifest entry shape (like
+     * PackCode.Pack), so the pack stays listed when Modrinth is unreachable.
+     */
+    "pack": string | null;
+}
+
+/**
+ * ModrinthVersion is one published version of a Modrinth modpack, for the
+ * version picker.
+ */
+export interface ModrinthVersion {
+    "id": string;
+    "number": string;
+
+    /**
+     * Type is "release", "beta" or "alpha".
+     */
+    "type": string;
+    "publishedAtMs": number;
+    "gameVersions": string[] | null;
+    "loaders": string[] | null;
+}
+
+/**
  * Pack is a manifest entry plus what is installed locally. Everything from
  * the manifest is present even when nothing is installed.
  */
@@ -88,7 +173,8 @@ export interface Pack {
     "name": string;
 
     /**
-     * Source is "code" (entered pack code) or "manifest" (from the pack list).
+     * Source is "code" (entered pack code), "modrinth" (a Modrinth modpack
+     * added by link) or "manifest" (from the pack list).
      */
     "source": string;
 
@@ -96,6 +182,17 @@ export interface Pack {
      * Code is the pack code this came from, when Source is "code".
      */
     "code": string | null;
+
+    /**
+     * Project is the Modrinth project slug, when Source is "modrinth".
+     */
+    "project": string | null;
+
+    /**
+     * HeldVersion is the Modrinth version a sync installs, when Source is
+     * "modrinth". Updating is an explicit choice (SetModrinthVersion).
+     */
+    "heldVersion": string | null;
     "description": string;
     "icon": string | null;
     "packUrl": string;
@@ -135,7 +232,24 @@ export interface Pack {
  */
 export interface PackCheck {
     "id": string;
+
+    /**
+     * LatestVersion is the newest the source offers: pack.toml's version for
+     * a packwiz pack, the newest release for a Modrinth pack.
+     */
     "latestVersion": string;
+
+    /**
+     * TargetVersion is what a sync installs now. For a packwiz pack it is
+     * LatestVersion; for a Modrinth pack it is the held version.
+     */
+    "targetVersion": string;
+
+    /**
+     * UpdateAvailable: a newer version exists than the one a sync would
+     * install (Modrinth packs only; the user chooses whether to take it).
+     */
+    "updateAvailable": boolean;
     "minecraft": string;
     "loader": string;
     "loaderVersion": string;
@@ -151,6 +265,10 @@ export interface PackCheck {
     "loaderInstalled": boolean;
     "toDownload": number;
     "toDelete": number;
+
+    /**
+     * UpToDate: the install matches TargetVersion and no file needs work.
+     */
     "upToDate": boolean;
 }
 
@@ -178,6 +296,12 @@ export interface Settings {
      * to last time, so the pack list works when the registry is unreachable.
      */
     "codes": PackCode[] | null;
+
+    /**
+     * Modrinth is every Modrinth modpack the user added by link, with what
+     * each resolved to last time.
+     */
+    "modrinth": ModrinthPack[] | null;
 
     /**
      * ManifestURL is an optional pack list (a manifest) the user was given.

@@ -3,7 +3,17 @@
 // shapes are bound by docs/ARCHITECTURE.md.
 import { Events } from '@wailsio/runtime';
 import * as Svc from '$bindings/muster/internal/minecraft/service';
-import type { Detected, LaunchSettings, Pack, PackCheck, Settings, SyncProgress, SyncReport } from './types';
+import type {
+  Detected,
+  LaunchSettings,
+  ModrinthLookup,
+  ModrinthVersion,
+  Pack,
+  PackCheck,
+  Settings,
+  SyncProgress,
+  SyncReport
+} from './types';
 
 export const SYNC_EVENT = 'minecraft:sync';
 
@@ -17,6 +27,14 @@ export const syncPack = (id: string): Promise<SyncReport> => Svc.SyncPack(id) as
 export const openLauncher = (): Promise<void> => Svc.OpenLauncher();
 export const addPackCode = (input: string): Promise<Pack> => Svc.AddPackCode(input) as Promise<Pack>;
 export const removePackCode = (code: string): Promise<void> => Svc.RemovePackCode(code);
+export const lookupModrinth = (input: string): Promise<ModrinthLookup> => Svc.LookupModrinth(input) as Promise<ModrinthLookup>;
+export const addModrinthPack = (input: string, version: string): Promise<Pack> =>
+  Svc.AddModrinthPack(input, version) as Promise<Pack>;
+export const removeModrinthPack = (id: string): Promise<void> => Svc.RemoveModrinthPack(id);
+export const listModrinthVersions = (id: string): Promise<ModrinthVersion[]> =>
+  Svc.ListModrinthVersions(id).then((v) => (v ?? []) as ModrinthVersion[]);
+export const setModrinthVersion = (id: string, version: string): Promise<Pack> =>
+  Svc.SetModrinthVersion(id, version) as Promise<Pack>;
 export const getLaunchSettings = (id: string): Promise<LaunchSettings> =>
   Svc.GetLaunchSettings(id) as Promise<LaunchSettings>;
 export const setLaunchSettings = (id: string, ls: LaunchSettings): Promise<LaunchSettings> =>

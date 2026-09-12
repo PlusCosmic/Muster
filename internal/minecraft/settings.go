@@ -34,6 +34,17 @@ func normalizeSettings(s models.Settings) models.Settings {
 	if s.Codes == nil {
 		s.Codes = []models.PackCode{}
 	}
+	if s.Modrinth == nil {
+		s.Modrinth = []models.ModrinthPack{}
+	}
+	kept := s.Modrinth[:0]
+	for _, m := range s.Modrinth {
+		m.Version = strings.TrimSpace(m.Version)
+		if m.ProjectID != "" && m.Slug != "" && m.PackID != "" && m.Version != "" {
+			kept = append(kept, m)
+		}
+	}
+	s.Modrinth = kept
 	if s.Packs == nil {
 		s.Packs = map[string]models.LaunchSettings{}
 	}
