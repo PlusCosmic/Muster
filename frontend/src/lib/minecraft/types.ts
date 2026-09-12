@@ -6,15 +6,22 @@ import type * as m from '$bindings/muster/internal/minecraft/models/models';
 type Lists<T> = { [K in keyof T]: T[K] extends (infer U)[] | null ? U[] : T[K] };
 
 export type PackCode = m.PackCode;
-export type Settings = Omit<Lists<m.Settings>, 'packs' | 'codes'> & { packs: Record<string, LaunchSettings>; codes: PackCode[] };
+export type ModrinthPack = m.ModrinthPack;
+export type Settings = Omit<Lists<m.Settings>, 'packs' | 'codes' | 'modrinth'> & {
+  packs: Record<string, LaunchSettings>;
+  codes: PackCode[];
+  modrinth: ModrinthPack[];
+};
 export type Detected = m.Detected;
 export type LaunchSettings = Lists<m.LaunchSettings>;
 export type Pack = Omit<Lists<m.Pack>, 'launch'> & { launch: LaunchSettings };
 export type PackCheck = m.PackCheck;
+export type ModrinthVersion = Lists<m.ModrinthVersion>;
+export type ModrinthLookup = Omit<Lists<m.ModrinthLookup>, 'versions'> & { versions: ModrinthVersion[] };
 export type Manual = m.Manual;
 export type SyncReport = Lists<m.SyncReport>;
 
-export type SyncPhase = 'files' | 'loader' | 'profile';
+export type SyncPhase = 'files' | 'loader' | 'profile' | 'waiting';
 
 /**
  * Payload of the `minecraft:sync` event (models.SyncProgress). The bindings
